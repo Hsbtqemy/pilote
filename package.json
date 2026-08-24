@@ -1,0 +1,11 @@
+{
+  "name": "pilote",
+  "version": "0.1.0",
+  "description": "Journal de bord local : confronte un dossier pilotage/ a ce que git montre.",
+  "type": "module",
+  "bin": { "pilote": "journal.mjs" },
+  "files": ["journal.mjs", "journal.html", "journal-contrat.mjs", "pilotage/verifier.mjs", "pilotage/_TEMPLATE.md", "pilotage/_CLAUDE-bloc.md", "README.md"],
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "private": true
+}
