@@ -24,7 +24,10 @@ import { join, extname } from "node:path";
 export const RX = {
   fm:      /^---\r?\n([\s\S]*?)\r?\n---/,
   h1:      /^#\s+(.+)$/m,
-  arret:   /^\*\*Arrêté sur\*\*\s*[—–-]?\s*(.+)$/m,
+  // « Point de départ » est le même artefact sous le mot juste pour un `à venir` :
+  // on ne s'est arrêté sur rien. Un seul champ, deux libellés — l'écran affiche celui
+  // que la fiche a écrit, et le contrat n'en gagne pas un second.
+  arret:   /^\*\*(?:Arrêté sur|Point de départ)\*\*\s*[—–-]?\s*(.+)$/m,
   box:     /^\s*[-*]\s+\[([ xX])\]\s+(.+)$/,
   h2:      /^##\s+(.+)$/,
   h3:      /^###\s+(.+)$/,
@@ -61,8 +64,12 @@ export const walk = async (dir) => {
  *  un `passe:` dans le frontmatter suffit, le dossier `qa/` aussi. */
 export const estPasse = (rel, fm) => fm.passe !== undefined || rel.includes("/qa/");
 
-/** Statuts admis pour un chantier. Absent ⇒ `interrompu` (journal.mjs). */
-export const STATUTS = ["interrompu", "clos", "livré"];
+/** Statuts admis pour un chantier. Absent ⇒ `interrompu` (journal.mjs).
+ *  `à venir` : cadré, pas commencé — une fiche écrite AVANT le premier commit de code.
+ *  Sans lui, un chantier neuf s'annonçait « interrompu », ce qui dit qu'on s'est arrêté
+ *  en plein travail alors que rien n'a commencé. Le journal le dément mécaniquement dès
+ *  qu'un commit de code cite le code (voir `commitsCode`). */
+export const STATUTS = ["à venir", "interrompu", "clos", "livré"];
 
 // Un constat est OUVERT si sa colonne sévérité porte une de ces pastilles ; ✅ ou
 // barré valent clos. `reconnu` distingue « aucun constat ouvert » de « je ne sais pas
@@ -70,9 +77,45 @@ export const STATUTS = ["interrompu", "clos", "livré"];
 // ouvert », un vert qui ne mesure rien.
 export const SEVERITES_OUVERTES = ["🔴", "🟠", "🟡", "🟢"];
 
+// Deux formes de constat coexistent dans la documentation d'un dépôt, et les lire
+// toutes les deux coûte moins cher que de renuméroter les audits — un code d'audit
+// finit cité partout, jusque dans les fichiers de CI.
+//
+//  · TABLEAU   `| A-01 | 🔴 | constat | preuve |`
+//    Le préfixe va de UNE à cinq lettres : `A-01`, `Q-01`, `T-01` étaient muets sous
+//    un ancien `{2,5}`. Un code barré (`| ~~A-05~~ |`) ne matche pas, donc n'est pas
+//    compté : c'est voulu, il est retiré.
+//  · TITRE     `### IMP-01 ✔ — 🔴 P0 — …`
+//    Collecté SEULEMENT s'il porte une pastille, et clos s'il porte ✔ ou ✅ — la
+//    pastille y est la SÉVÉRITÉ, pas l'état, si bien qu'un `✔ — 🔴` compterait
+//    ouvert sans cette seconde lecture.
+//
+// La condition de pastille n'est pas une commodité. Un backlog mesuré portait des
+// codes en titre (`### C-1 — …`) et AUCUNE sévérité : le collecter le faisait passer
+// « reconnu, 0 ouvert » alors que six items y étaient ouverts — un vert qui ne mesure
+// rien, précisément ce que `reconnu` existe pour empêcher. Il reste INCONNU, et c'est
+// le document qu'il faut alors corriger, pas cette règle.
+const CLOS_EN_TITRE = ["✔", "✅"];
+
 export const constatsAudit = (texte) => {
-  const constats = [];
-  for (const [, code, sev] of texte.matchAll(/^\|\s*([A-Z]{2,5}-\d+)\s*\|\s*([^|]*?)\s*\|/gm))
-    constats.push({ code, sev, ouvert: SEVERITES_OUVERTES.some(s => sev.includes(s)) });
+  // Clé = le code, et le TABLEAU gagne. Un audit mesuré portait les DEUX formes — un
+  // tableau de 24 lignes ET une section `### CODE-NN` par constat — et les additionner
+  // faisait passer son compte de 16 à 38 ouverts. Le tableau est l'index
+  // canonique : lui seul porte l'état (✅, code barré) ; la section ne porte que le
+  // détail, et n'y répète pas la clôture.
+  const parCode = new Map();
+  for (const [, code, sev] of texte.matchAll(/^\|\s*([A-Z]{1,5}-\d+)\s*\|\s*([^|]*?)\s*\|/gm))
+    if (!parCode.has(code))
+      parCode.set(code, { code, sev, ouvert: SEVERITES_OUVERTES.some(s => sev.includes(s)) });
+  for (const [, code, reste] of texte.matchAll(/^#{2,4}\s+([A-Z]{1,5}-\d+)\b(.*)$/gm)) {
+    if (parCode.has(code)) continue;
+    // `sev` vaut LA PASTILLE SEULE, comme en forme tableau : les appelants s'en servent
+    // de clé de regroupement (`parSeverite[sev]`), et y verser tout le reste du titre
+    // fabriquait un seau par constat au lieu d'un seau par sévérité.
+    const pastille = SEVERITES_OUVERTES.find(s => reste.includes(s));
+    if (!pastille) continue;
+    parCode.set(code, { code, sev: pastille, ouvert: !CLOS_EN_TITRE.some(m => reste.includes(m)) });
+  }
+  const constats = [...parCode.values()];
   return { reconnu: constats.length > 0, constats };
 };

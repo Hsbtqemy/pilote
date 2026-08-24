@@ -8,9 +8,8 @@ Deux natures, à ne pas mélanger.
   relance à chaque fois qu'on veut revérifier. On la décoche et on recommence.
 
 Un ticket de backlog n'est pas une troisième nature : c'est un chantier dont le travail
-n'a pas commencé. Même gabarit, `Arrêté sur` absent, aucun commit — l'écran le montre
-tel quel. Une idée devient un ticket, puis un chantier, puis un chantier clos, **sans
-jamais changer de document**.
+n'a pas commencé — `statut: à venir`. Une idée devient un ticket, puis un chantier, puis
+un chantier clos, **sans jamais changer de document**.
 
 > Ce fichier DÉCRIT le contrat ; `journal-contrat.mjs` le DÉFINIT. Quand les deux
 > divergent, c'est le code qui a raison — c'est déjà arrivé.
@@ -52,12 +51,26 @@ Collision connue : R5 partage 25 fichiers, dont sidecar.py.
 | Élément | Règle | Si absent |
 |---|---|---|
 | `chantier:` | Le code, **tel qu'il apparaît dans les sujets de commit** | Le nom de fichier sert de code |
-| `statut:` | `interrompu` · `clos` · `livré` | Traité comme `interrompu` |
+| `statut:` | `à venir` · `interrompu` · `clos` · `livré` | Traité comme `interrompu` |
 | `audit:` | Chemin du document qui porte le tableau des constats | Pas de remontée, pas de lien |
 | `# Titre` | Premier H1 | Le code sert de titre |
-| `**Arrêté sur**` | La ligne entière après le tiret ; l'outil signale qu'elle est périmée dès qu'elle ne cite plus le dernier commit | Ligne omise |
+| `**Arrêté sur**` | La ligne entière après le tiret ; l'outil la signale **décalée** dès qu'elle ne cite plus le dernier commit de code. `**Point de départ**` est accepté à sa place, et c'est le mot juste sur un `à venir` — qui n'est jamais signalé décalé, n'ayant aucun commit à citer | Ligne omise |
 | `## Reste` | Les cases ; les `###` y regroupent par zone, comme dans une passe | Section absente de l'écran |
 | `## Contexte` | Prose, affichée telle quelle | Rien |
+
+**`statut: à venir`** est pour la fiche écrite *avant* le premier commit de code : le
+chantier est cadré, il n'a pas commencé. Sans lui, un chantier neuf s'annonce
+`interrompu` — le mot dit qu'on s'est arrêté en plein travail alors qu'on n'a rien
+commencé.
+
+Rien n'oblige à le tenir à jour : le journal le **dément** tout seul dès qu'un commit
+citant le code touche autre chose que `pilotage/` et le dossier de documentation. La
+fiche affiche alors « N commits de code », et le tableau de bord compte les « à venir »
+démentis, comme il compte les points de reprise décalés.
+
+> Ce démenti a besoin de savoir où vit ta documentation. Sans `documentation.dossier`
+> dans l'inventaire, une note de conception compte comme du code et dément un `à venir`
+> qui était juste.
 
 Les passes ne se déclarent pas ici : c'est la passe qui nomme son chantier, pas
 l'inverse. Une section `## QA` qui les listerait ne serait jamais lue.
