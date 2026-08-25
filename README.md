@@ -144,3 +144,18 @@ l'importent tous les deux, pour qu'un vert ne puisse pas vérifier autre chose q
 l'écran applique. `pilotage/_TEMPLATE.md` les **décrit**. Ce README ne les redit pas.
 
 Quand un document contredit `journal-contrat.mjs`, c'est le code qui a raison.
+
+---
+
+## Licence
+
+MIT — voir [LICENSE](LICENSE). Copie, modifie, redistribue, y compris dans un produit
+fermé ; garde la notice.
+
+Le dépôt était public avec `"license": "MIT"` dans `package.json` et **aucun fichier
+LICENSE** : la déclaration ne suffisait pas, le défaut légal restait « tous droits
+réservés ». C'est réparé ici.
+
+`"private": true` reste en place, exprès. Il ne bloque que `npm publish`, et rien n'en
+dépend : l'installation se fait par l'URL git, mesurée et éprouvée. Le retirer sera le
+geste qui accompagne une vraie publication, pas un préalable.
