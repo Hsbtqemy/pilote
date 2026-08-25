@@ -355,6 +355,54 @@ const entree = (chemin) => surTete("entree:" + chemin, () =>
   git("log", "--all", "--diff-filter=A", "--format=%ad", "--date=short", "--", chemin)
     .split("\n").filter(Boolean).pop() || null);
 
+// ---------- collisions entre chantiers ----------
+// Deux chantiers qui ont touché les mêmes fichiers se marcheront dessus à la reprise.
+// La relation existe déjà dans les fiches, écrite à la main — et mesurée le 2026-08-25,
+// les trois chiffres inscrits étaient tous faux, tous sous-évalués (14→21, 12→25,
+// 25→31), et la deuxième collision du dépôt n'était écrite nulle part. Une déclaration
+// manuelle enregistre ce à quoi on a pensé, jamais ce qu'on a manqué.
+//
+// `docs/` et le dossier de pilotage sont écartés : deux chantiers qui citent le même
+// audit ne se marchent pas dessus, ils se réfèrent au même document.
+const fichiersParCommit = () => surTete("fichiers", () => {
+  const raw = git("log", "--all", "--no-renames", "--name-only", "--format=@%h");
+  const par = new Map();
+  const exclus = [DIR + "/", CFG.documentation?.dossier && CFG.documentation.dossier + "/"]
+    .filter(Boolean);
+  let cur = null;
+  for (const l of raw.split("\n")) {
+    if (l.startsWith("@")) { cur = new Set(); par.set(l.slice(1), cur); continue; }
+    if (!l.trim() || !cur) continue;
+    if (exclus.some(e => l.startsWith(e))) continue;
+    cur.add(l);
+  }
+  return par;
+});
+
+const fichiersDe = (liste, par) => {
+  const s = new Set();
+  for (const c of liste) for (const f of par.get(c.hash) || []) s.add(f);
+  return s;
+};
+
+// Le nombre seul ne suffit pas : une collision avec un chantier clos est un empiètement
+// HISTORIQUE — le terrain est stabilisé — tandis qu'avec un chantier vivant c'est un
+// risque présent. Même nombre, situation opposée. L'état de l'autre voyage donc avec.
+const collisions = (moi, sets, chantiers) => {
+  const a = sets.get(moi.code);
+  if (!a || !a.size) return null;
+  const out = [];
+  for (const o of chantiers) {
+    if (o.code === moi.code) continue;
+    const b = sets.get(o.code);
+    if (!b || !b.size) continue;
+    let n = 0;
+    for (const f of a) if (b.has(f)) n++;
+    if (n) out.push({ code: o.code, n, statut: o.statut, silence: o.silence });
+  }
+  return out.length ? out.sort((x, y) => y.n - x.n) : null;
+};
+
 // ---------- portée d'un audit ----------
 // Un audit observe le code à la date où il est écrit. Le code bouge ensuite, souvent par
 // d'autres chantiers. Ce qui est mesuré ici n'est PAS qu'un constat est réglé — aucune
@@ -466,6 +514,7 @@ async function build() {
   const proprietaire = {};
   for (const [ch, codes] of Object.entries(rem)) for (const c of codes) proprietaire[c] = ch;
 
+  const parCommit = fichiersParCommit(), sets = new Map();
   for (const ch of chantiers) {
     const codes = [ch.code, ...(rem[ch.code] || [])];
     ch.remontee = rem[ch.code] || null;
@@ -501,9 +550,13 @@ async function build() {
     // Un `à venir` n'a pas de point de reprise à périmer : sa ligne est un point de
     // départ, elle ne cite aucun commit et n'a pas à en citer un.
     ch.arreteDecale = ch.statut !== "à venir" && Boolean(c_arreteDecale(ch));
+    sets.set(ch.code, fichiersDe(liste, parCommit));
     ch.passes = passes.filter(p => p.chantier === ch.code).map(p => p.file);
     liens[ch.code] = `#/c/${encodeURIComponent(ch.code)}`;
   }
+  // Une seconde passe : croiser deux chantiers suppose les deux ensembles construits.
+  for (const ch of chantiers) ch.collisions = collisions(ch, sets, chantiers);
+
   // Une passe vieillit comme un chantier : en jours actifs. Sans ça, « armée mais pas
   // encore jouée » ne durait qu'une journée et sortait de l'écran le lendemain.
   for (const p of passes) {

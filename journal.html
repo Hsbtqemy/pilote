@@ -454,6 +454,22 @@ const aRelire = () => {
   return [...par.values()].sort((x, y) => y.portee.commits - x.portee.commits);
 };
 
+/* Les collisions : combien de fichiers deux chantiers ont touchés en commun. L'état de
+   l'autre est dit avec le nombre, parce qu'il le retourne — 29 fichiers partagés avec un
+   chantier livré, c'est un terrain stabilisé qu'on retrouvera tel quel ; 20 avec un
+   chantier qui a bougé ce matin, c'est un risque présent. On montre l'état plutôt que
+   d'en fabriquer une pondération : le lecteur sait ce que « livré » veut dire chez lui. */
+const ditCollisions = (l) => l.slice(0, 3).map(x => {
+  const ferme = x.statut === "clos" || x.statut === "livré";
+  const etat = ferme ? esc(x.statut)
+    : x.silence === null ? "jamais commencé"
+    : `${x.silence} j de silence`;
+  // Parenthèses : sans elles, « R5 20 4 j de silence » colle deux nombres qui ne parlent
+  // pas de la même chose.
+  return `<a href="#/c/${encodeURIComponent(x.code)}">${esc(x.code)}</a>
+    <b>${x.n}</b> <i>(${etat})</i>`;
+}).join(" · ");
+
 const byCode = c => D.chantiers.find(x => x.code === c);
 const byFile = f => D.passes.find(p => p.file === f);
 const jour = s => new Date(s + "T00:00:00")
@@ -698,6 +714,8 @@ function vueFiche(code){
       <code>${esc(c.code)}</code> — ${c.remontee.slice(0, 2).map(esc).join(", ")}…`],
     c.audit && ["source", pastilles(esc(c.audit))],
     c.portee && ["portée", ditPortee(c.portee)],
+    c.collisions && ["collisions", ditCollisions(c.collisions)
+      + (c.collisions.length > 3 ? ` <i>+${c.collisions.length - 3} autres</i>` : "")],
     ["fiche", `<a href="${vsc(c.file)}">${esc(c.file)}</a>`]
   ].filter(Boolean);
 
