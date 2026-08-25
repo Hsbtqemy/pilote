@@ -15,12 +15,12 @@ ces sections.
 - Le commit de code d'abord, le commit de fiche ensuite, **séparément** : une fiche
   ne peut pas citer le commit qui la met à jour, et les commits qui ne touchent que
   `pilotage/` sont exclus du datage.
-- Avant de clore une session : `node pilotage/verifier.mjs` (code de retour non nul
+- Avant de clore une session : `pilote verifier` (code de retour non nul
   = l'outil lira mal le dossier ; `--strict` rend les avertissements bloquants).
 - QA visuelle : écrire une passe dans `pilotage/qa/`, jamais dans le fil de
   conversation. Regrouper les points par zone en H3.
 - Ne jamais cocher soi-même une case d'une passe de QA.
 - Ne pas créer de fichier pour un finding traité en un seul commit.
 
-Le journal se lit avec `npx pilote` puis `localhost:4123` (git + `pilotage/`, lecture
+Le journal se lit avec `pilote` puis `localhost:4123` (git + `pilotage/`, lecture
 seule sauf les cases, dont l'écriture est bornée à `pilotage/`).

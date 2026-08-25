@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Journal de bord — serveur local.
-//   node journal.mjs [--port 4123] [--dir pilotage] [--days 60]
+//   pilote            [--port 4123] [--dir pilotage] [--days 60]
+//   pilote verifier   [--dir pilotage] [--strict] [--json]
 // Aucune dépendance. Node 18+.
 
 import { createServer } from "node:http";
@@ -44,6 +45,17 @@ const ROOT = process.cwd();
 const OUTIL = dirname(fileURLToPath(import.meta.url));
 // Longueur de la traînée de commits affichée sur une fiche.
 const TRAINEE = Number(opt("trainee", 5));
+
+// Un seul point d'entrée. Le dépôt hôte n'a plus à héberger l'outil : ni le serveur,
+// ni la vue, ni le contrat, ni le contrôleur — qui vivait dans `pilotage/` mais
+// importait `../journal-contrat.mjs`, ce qui rendait les quatre fichiers indissociables
+// et forçait à les recopier ensemble à chaque lot.
+//
+// Un second binaire aurait obligé l'appelant à connaître son nom interne
+// (`npx --package … pilote-verifier`) ; une sous-commande se retient. Le contrôleur lit
+// `process.argv` lui-même et trouve ses drapeaux par nom : le mot `verifier` en tête ne
+// le gêne pas. Il finit sur `process.exit`, donc l'import ne rend jamais la main.
+if (args[0] === "verifier") await import(pathToFileURL(join(OUTIL, "pilotage/verifier.mjs")).href);
 
 // ---------- ce que le journal sait de ce dépôt ----------
 // Tout ce qui nomme des chemins, des fichiers ou des codes vit dans

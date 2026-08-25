@@ -16,15 +16,26 @@ et pour l'agent qui travaille dans le même dépôt.
 ## Installer
 
 ```bash
-npx pilote            # dans n'importe quel dépôt git
+npx github:Hsbtqemy/pilote            # le journal, sur localhost:4123
+npx github:Hsbtqemy/pilote verifier   # le contrôleur du dossier
 ```
 
 Le serveur écoute sur `localhost:4123`. Options : `--port`, `--dir` (défaut `pilotage`),
-`--days`, `--refs`, `--trainee`.
+`--days`, `--refs`, `--trainee`. Le contrôleur prend `--dir`, `--strict`, `--json`.
+
+`npx` va rechercher l'outil à chaque lancement : mesuré, **4,3 s contre 0,4 s** pour une
+copie locale. C'est bon pour essayer, mauvais pour un dépôt dont tu ouvres le journal
+tous les jours. Là, prends-le en dépendance :
+
+```json
+{ "devDependencies": { "pilote": "github:Hsbtqemy/pilote" },
+  "scripts": { "journal": "pilote", "verifier": "pilote verifier" } }
+```
 
 Rien n'est copié dans ton projet, sauf ce que tu écris toi-même : le dossier `pilotage/`
 et, si tu le veux, un fichier d'inventaire. Les mises à jour de l'outil profitent à tous
-tes dépôts d'un coup, sans fork.
+tes dépôts d'un coup, sans fork — c'est tout l'intérêt, et le dépôt d'où vient l'outil a
+mis quatre reports à la main en une journée avant de s'y mettre.
 
 Pour commencer, copie `pilotage/_TEMPLATE.md` et écris ta première fiche.
 
@@ -63,7 +74,7 @@ Un format qui marche : `PREFIXE-N`, le préfixe nommant un domaine (`ANN-2`, `SE
 
 ## La discipline
 
-Tout ce qui est mécanique est tenu par `pilotage/verifier.mjs`. Ce qui suit ne peut être
+Tout ce qui est mécanique est tenu par `pilote verifier`. Ce qui suit ne peut être
 tenu que par toi.
 
 **1. Le commit de code d'abord, le commit de fiche ensuite — séparément.** C'est
@@ -80,7 +91,7 @@ Une vérification qui n'existe que dans un échange n'est pas rejouable.
 **4. On ne coche jamais une case de QA à la place de qui l'a écrite.** Si tu délègues la
 passe à un agent, il la rédige et te la rend ; c'est toi qui coches.
 
-**5. `node pilotage/verifier.mjs` avant de clore une session.** Code de retour non nul =
+**5. `pilote verifier` avant de clore une session.** Code de retour non nul =
 l'outil lira mal le dossier.
 
 ---
