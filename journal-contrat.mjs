@@ -68,8 +68,17 @@ export const estPasse = (rel, fm) => fm.passe !== undefined || rel.includes("/qa
  *  `à venir` : cadré, pas commencé — une fiche écrite AVANT le premier commit de code.
  *  Sans lui, un chantier neuf s'annonçait « interrompu », ce qui dit qu'on s'est arrêté
  *  en plein travail alors que rien n'a commencé. Le journal le dément mécaniquement dès
- *  qu'un commit de code cite le code (voir `commitsCode`). */
-export const STATUTS = ["à venir", "interrompu", "clos", "livré"];
+ *  qu'un commit de code cite le code (voir `commitsCode`).
+ *
+ *  `différé` : mis en attente exprès, parce qu'autre chose doit aboutir d'abord. Il
+ *  était implémenté par la VUE — bac propre, pastille, compté comme ouvert — mais
+ *  absent d'ici, donc REFUSÉ par le contrôleur : l'écrire donnait un écran juste et un
+ *  contrôleur rouge. Les deux moitiés de l'outil se contredisaient.
+ *
+ *  Il n'a pas de démenti mécanique, et c'est délibéré : `commitsCode` compte sur toute
+ *  la fenêtre, sans savoir ce qui précède la mise en attente. Le démenti se déclencherait
+ *  sur l'historique légitime d'avant. Il en faudrait une date, que la fiche ne porte pas. */
+export const STATUTS = ["à venir", "interrompu", "clos", "différé", "livré"];
 
 // Un constat est OUVERT si sa colonne sévérité porte une de ces pastilles ; ✅ ou
 // barré valent clos. `reconnu` distingue « aucun constat ouvert » de « je ne sais pas

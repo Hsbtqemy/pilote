@@ -51,7 +51,7 @@ Collision connue : R5 partage 25 fichiers, dont sidecar.py.
 | Élément | Règle | Si absent |
 |---|---|---|
 | `chantier:` | Le code, **tel qu'il apparaît dans les sujets de commit** | Le nom de fichier sert de code |
-| `statut:` | `à venir` · `interrompu` · `clos` · `livré` | Traité comme `interrompu` |
+| `statut:` | `à venir` · `interrompu` · `différé` · `clos` · `livré` | Traité comme `interrompu` |
 | `audit:` | Chemin du document qui porte le tableau des constats | Pas de remontée, pas de lien |
 | `# Titre` | Premier H1 | Le code sert de titre |
 | `**Arrêté sur**` | La ligne entière après le tiret ; l'outil la signale **décalée** dès qu'elle ne cite plus le dernier commit de code. `**Point de départ**` est accepté à sa place, et c'est le mot juste sur un `à venir` — qui n'est jamais signalé décalé, n'ayant aucun commit à citer | Ligne omise |
@@ -67,6 +67,17 @@ Rien n'oblige à le tenir à jour : le journal le **dément** tout seul dès qu'
 citant le code touche autre chose que `pilotage/` et le dossier de documentation. La
 fiche affiche alors « N commits de code », et le tableau de bord compte les « à venir »
 démentis, comme il compte les points de reprise décalés.
+
+**`statut: différé`** est pour le chantier mis en attente *exprès*, parce qu'autre chose
+doit aboutir d'abord — un constat d'audit repoussé derrière la vérification d'un geste,
+une décision qui attend qu'un morceau soit fini pour se trancher au mieux. `interrompu`
+dit qu'on s'est arrêté en plein travail ; `différé` dit qu'on a choisi d'attendre. Les
+deux comptent comme ouverts et n'ont pas la même dette.
+
+Contrairement à `à venir`, il n'est **pas** démenti mécaniquement. Le compte de commits
+de code porte sur toute la fenêtre et ne sait pas ce qui précède la mise en attente : un
+démenti se déclencherait sur l'historique légitime d'avant. Il faudrait une date de mise
+en attente, que la fiche ne porte pas — à écrire dans `## Contexte` en attendant.
 
 > Ce démenti a besoin de savoir où vit ta documentation. Sans `documentation.dossier`
 > dans l'inventaire, une note de conception compte comme du code et dément un `à venir`
