@@ -228,6 +228,12 @@ a{color:var(--outremer)}
 .av a:hover{border-bottom-color:currentColor}
 .av a i{font-style:normal;color:var(--encre3);margin-left:.25em}
 
+/* Une pastille ne se coupe pas — c est ce qu on veut d un code court, pas d un chemin
+   de document. Mesuré : un nom de 34 caractères débordait de 34 px du panneau latéral,
+   qui fait 208 px de contenu. La pastille de chemin s autorise donc la coupure ; elle
+   reste une pastille, elle cesse d être insécable. */
+.pill.doc{white-space:normal;overflow-wrap:anywhere}
+
 /* ---- frise ---- */
 /* Pas de SVG : une piste en position relative et des barres en pourcentage. Un SVG en
    largeur 100 % dans une colonne qui se dimensionne sur son contenu se résout en rond
@@ -403,7 +409,7 @@ function pastilles(html){
       : `${pre}<a class="pill e" href="${vsc(cible)}">${code}</a>`;
   });
   return html.replace(/(^|[^\w\/-])(docs\/[\w.\-]+\.md)/g,
-    (m, pre, p) => `${pre}<a class="pill e" href="${vsc(p)}">${p.replace("docs/", "")}</a>`);
+    (m, pre, p) => `${pre}<a class="pill e doc" href="${vsc(p)}">${p.replace("docs/", "")}</a>`);
 }
 
 const inline = s => s.replace(/`([^`]+)`/g, "<code>$1</code>")
