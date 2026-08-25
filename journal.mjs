@@ -6,7 +6,7 @@
 import { createServer } from "node:http";
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile, readdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative, basename, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 // Contrat de parsing partage avec pilotage/verifier.mjs -- voir journal-contrat.mjs.
@@ -74,14 +74,24 @@ const CFG = await (async () => {
 const REFS = opt("refs", CFG.refs.join(","))
   .split(",").map(s => s.trim()).filter(Boolean);
 
-// stderr ignoré : sur un dépôt sans commit, git écrit huit `fatal:` sur la console
-// avant que le journal ait rendu sa première page. L'appel échoue déjà proprement —
-// c'est le `catch` qui décide, pas le bruit.
-const git = (...a) => {
+// Lecture synchrone tolérante : un document annoncé par une fiche peut avoir disparu.
+const lireSync = (p) => { try { return readFileSync(p, "utf8"); } catch { return null; } };
+
+// Rend null quand la commande ÉCHOUE, "" quand elle réussit sans rien dire. `git()` écrase
+// les deux, ce qui convient partout où une absence vaut zéro — mais pas là où un zéro
+// serait lui-même une mesure. Payé une fois : un `--format=@` invalide (git y lit un NOM
+// de format) faisait rendre "" pour chaque audit, donc « 0 commit depuis » sur les dix,
+// un vert parfaitement faux.
+//
+// stderr ignoré : sur un dépôt sans commit, git écrit huit `fatal:` sur la console avant
+// que le journal ait rendu sa première page. C'est le `catch` qui décide, pas le bruit.
+const gitEssai = (...a) => {
   try { return execFileSync("git", a,
     { cwd: ROOT, encoding: "utf8", maxBuffer: 64e6, stdio: ["ignore", "pipe", "ignore"] }).trim(); }
-  catch { return ""; }
+  catch { return null; }
 };
+
+const git = (...a) => gitEssai(...a) ?? "";
 
 // ---------- lecture de pilotage/ ----------
 async function pilotage() {
@@ -345,6 +355,60 @@ const entree = (chemin) => surTete("entree:" + chemin, () =>
   git("log", "--all", "--diff-filter=A", "--format=%ad", "--date=short", "--", chemin)
     .split("\n").filter(Boolean).pop() || null);
 
+// ---------- portée d'un audit ----------
+// Un audit observe le code à la date où il est écrit. Le code bouge ensuite, souvent par
+// d'autres chantiers. Ce qui est mesuré ici n'est PAS qu'un constat est réglé — aucune
+// mesure ne peut le dire — mais que le sol a bougé sous lui, donc qu'il faut le relire
+// avant de planifier dessus.
+//
+// Les chemins sont trouvés par leur forme, puis filtrés par leur EXISTENCE dans l'arbre.
+// Une liste de dossiers ou d'extensions admis serait exactement le réglage propre à un
+// dépôt qu'on refuse d'introduire ; ce qui n'existe pas n'est pas un chemin.
+//
+// Le dossier de pilotage et celui de la documentation sont écartés : un audit qui en
+// cite un autre parle de lui-même, pas du code qu'il décrit.
+const RX_CHEMIN = /\b[A-Za-z0-9_][A-Za-z0-9_.-]*(?:\/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]{1,6}\b/g;
+// Au-delà, la ligne de commande git dépasse la limite du système. Le compte devient
+// partiel et le DIT (`tronque`), plutôt que de mentir par un chiffre trop bas.
+const MAX_CHEMINS = 80;
+
+function calculPortee(fichier, depuis) {
+  const texte = lireSync(join(ROOT, fichier));
+  if (texte === null || !depuis) return null;
+  const exclus = [DIR + "/", CFG.documentation?.dossier && CFG.documentation.dossier + "/"]
+    .filter(Boolean);
+  const vus = new Set();
+  for (const m of texte.match(RX_CHEMIN) || []) {
+    const c = m.replace(/^\.\//, "");
+    if (exclus.some(e => c.startsWith(e))) continue;
+    if (!vus.has(c) && existsSync(join(ROOT, c))) vus.add(c);
+  }
+  const chemins = [...vus];
+  const vises = chemins.slice(0, MAX_CHEMINS);
+  // Zéro chemin n'est pas zéro mouvement : c'est « je n'ai pas su regarder ». Les deux
+  // doivent se distinguer à l'écran, sinon un audit qui parle de comportements plutôt
+  // que de fichiers passerait pour un audit dont le code n'a pas bougé.
+  if (!vises.length) return { chemins: 0, tronque: false, commits: null, plus: 0, moins: 0, depuis };
+
+  // `--format=@` seul est refusé par git, qui y lit un NOM de format ; il faut au moins un
+  // placeholder. Et l échec doit remonter en « inconnu », pas en zéro.
+  const raw = gitEssai("log", "--all", "--no-renames", "--numstat", "--format=@%h",
+                       "--since=" + depuis, "--", ...vises);
+  if (raw === null) return { chemins: chemins.length, tronque: false, commits: null,
+                             plus: 0, moins: 0, depuis, echec: true };
+  let commits = 0, plus = 0, moins = 0;
+  for (const l of raw.split("\n")) {
+    if (l.startsWith("@")) { commits++; continue; }
+    const f = l.split("\t");
+    if (/^\d+$/.test(f[0])) { plus += Number(f[0]); moins += Number(f[1]); }
+  }
+  return { chemins: chemins.length, tronque: chemins.length > MAX_CHEMINS,
+           commits, plus, moins, depuis };
+}
+
+const portee = (fichier, depuis) =>
+  surTete(`portee:${fichier}:${depuis}`, () => calculPortee(fichier, depuis));
+
 // ---------- contrôleur du dossier ----------
 // `pilotage/verifier.mjs` s'exécute au chargement et sort par process.exit : on le
 // lance en processus fils plutôt que de l'importer. Code de retour non nul = il a
@@ -418,6 +482,7 @@ async function build() {
     // marque sur l'axe du temps : pas de commit, donc pas de barre, donc invisible là où
     // il est justement le plus utile de le voir — récent et pas commencé.
     ch.ficheDate = entree(ch.file);
+    ch.portee = ch.audit ? portee(ch.audit, ch.auditDate) : null;
     ch.silence = last ? joursActifs(jours, last.date) : null;
     const f = last ? fr.find(x => x.hashes.has(last.full)) : null;
     ch.front = f ? { ref: f.nom, integre: f.integre } : null;

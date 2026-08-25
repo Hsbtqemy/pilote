@@ -419,6 +419,41 @@ const slug = s => SLUG[s] || "int";
    qui citent son code touchent autre chose que la doc et `pilotage/`. Déclaré d'un
    côté, mesuré de l'autre — on montre l'écart plutôt que d'arbitrer. */
 const dementi = c => c.statut === "à venir" && c.commitsCode > 0;
+/* La portée d'un audit : combien le code a bougé sous lui depuis qu'il est écrit.
+   Elle ne dit JAMAIS qu'un constat est réglé — aucune mesure ne peut le dire. Elle dit
+   que le sol a bougé, donc qu'il faut relire avant de planifier. D'où « à relire » et
+   jamais « périmé » : le second trancherait sur le fond.
+   Zéro chemin et zéro commit ne se ressemblent pas et ne doivent pas se lire pareil —
+   mesuré, un audit qui parle de comportements plutôt que de fichiers ne rend qu'un seul
+   chemin, et son zéro voudrait dire « je n'ai pas su regarder ». */
+const ditPortee = (p) => {
+  if (!p) return null;
+  if (p.echec) return "mesure impossible — la commande git a échoué";
+  if (!p.chemins) return "aucun chemin reconnu dans ce document — mouvement <b>inconnu</b>, pas nul";
+  const ou = `sur ${p.chemins} chemin${p.chemins > 1 ? "s" : ""} cité${p.chemins > 1 ? "s" : ""}`;
+  if (!p.commits) return `aucun mouvement ${ou} depuis le ${jour(p.depuis)}`;
+  return `<b>${p.commits.toLocaleString("fr-FR")} commits</b> ${ou}, depuis le ${jour(p.depuis)}
+    <i>+${p.plus.toLocaleString("fr-FR")} −${p.moins.toLocaleString("fr-FR")}</i>`
+    + (p.tronque ? " — compte partiel, trop de chemins pour une seule mesure" : "");
+};
+
+/* À relire : le sol a bougé ET il reste des constats ouverts dessus. L'un sans l'autre
+   ne change rien à ce qu'on fait — un audit remué mais soldé est de l'histoire, un audit
+   intact garde ses constats valables.
+   Le compte porte sur les DOCUMENTS, pas sur les fiches : quatre chantiers partageaient
+   le même audit et le faisaient compter quatre fois. On le relit une fois pour les quatre. */
+const aRelire = () => {
+  const par = new Map();
+  for (const c of D.chantiers) {
+    const a = D.controle?.audits?.[c.audit];
+    if (!(c.portee?.commits > 0 && a?.reconnu && a.total > 0)) continue;
+    const e = par.get(c.audit) || { audit: c.audit, portee: c.portee, ouverts: a.total, codes: [] };
+    e.codes.push(c.code);
+    par.set(c.audit, e);
+  }
+  return [...par.values()].sort((x, y) => y.portee.commits - x.portee.commits);
+};
+
 const byCode = c => D.chantiers.find(x => x.code === c);
 const byFile = f => D.passes.find(p => p.file === f);
 const jour = s => new Date(s + "T00:00:00")
@@ -512,6 +547,14 @@ function bandeBord(){
   const dem = D.chantiers.filter(dementi);
   if (dem.length) l.push({ cle: "« à venir » démentis", val: String(dem.length),
     note: `du code est déjà tombé · ${dem.map(c => versFiche(c.code)).join(" ")}` });
+
+  /* Le seul autre endroit où un document déclaré se confronte à une mesure : l'audit
+     sur lequel s'appuie un chantier, et le code qui a bougé sous lui depuis. */
+  const rel = aRelire();
+  if (rel.length) l.push({ cle: "audits à relire avant de planifier", val: String(rel.length),
+    note: rel.slice(0, 3).map(e =>
+      `${e.codes.map(versFiche).join(" ")} <i>${e.portee.commits} commits sous ${e.ouverts} constats</i>`
+    ).join(" · ") });
 
   /* Seul chiffre volontairement inerte : il est la somme des Reste de toutes les
      fiches, et sa destination est la liste qui suit déjà sur cet écran. */
@@ -654,6 +697,7 @@ function vueFiche(code){
     c.remontee && ["remontée", `${c.remontee.length} codes de constat comptés comme
       <code>${esc(c.code)}</code> — ${c.remontee.slice(0, 2).map(esc).join(", ")}…`],
     c.audit && ["source", pastilles(esc(c.audit))],
+    c.portee && ["portée", ditPortee(c.portee)],
     ["fiche", `<a href="${vsc(c.file)}">${esc(c.file)}</a>`]
   ].filter(Boolean);
 
