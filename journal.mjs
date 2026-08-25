@@ -322,17 +322,45 @@ function calculMasses(seuil, fenetre) {
 // (voir `pilotage/journal.config.mjs`). Absent = pas de bandeau de veille.
 const VEILLE = CFG.veille;
 
-// Mémo sur le hash de HEAD : ce qui ne dépend que de l'historique se recalcule au
-// commit suivant, pas à chaque coche de case. (Le contrôleur, lui, lit les fichiers
-// de `pilotage/` — il doit rester vivant, il n'est pas mémorisé.)
+// Mémo sur le hash de HEAD : ce qui ne dépend que de l'historique se recalcule au commit
+// suivant, pas à chaque coche de case. (Le contrôleur, lui, lit les fichiers de
+// `pilotage/` — il doit rester vivant, il n'est pas mémorisé.)
+//
+// La tête est lue UNE fois par requête, pas à chaque consultation de clé. Mesuré : avec
+// une quarantaine de clés, `rev-parse HEAD` était appelé 47 fois et coûtait 1,16 s — le
+// mémo dépensait plus qu'il n'économisait. `build()` remet le cache à zéro en entrant.
 const memos = new Map();
+let TETE = null;
+const tete = () => TETE ?? (TETE = git("rev-parse", "HEAD"));
 const surTete = (cle, fn) => {
-  const tete = git("rev-parse", "HEAD"), m = memos.get(cle);
-  if (tete && m && m.tete === tete) return m.val;
+  const t = tete(), m = memos.get(cle);
+  if (t && m && m.tete === t) return m.val;
   const val = fn();
-  memos.set(cle, { tete, val });
+  memos.set(cle, { tete: t, val });
   return val;
 };
+
+// Quand chaque document est entré dans le dépôt. Le nom de fichier porte souvent la date,
+// mais pas toujours, et il peut mentir : `--diff-filter=A` la donne pour n'importe quel
+// fichier, sans convention de nommage.
+//
+// UNE passe pour tout l'arbre, pas une par chemin. Mesuré : trente et un relevés séparés
+// coûtaient 4,7 s au démarrage, chacun parcourant l'historique entier pour un seul
+// fichier. Le journal sort du plus récent au plus ancien, donc la DERNIÈRE occurrence
+// d'un chemin est son entrée.
+const entrees = () => surTete("entrees", () => {
+  const raw = git("log", "--all", "--diff-filter=A", "--name-only",
+                  "--format=@%ad", "--date=short");
+  const par = new Map();
+  let d = null;
+  for (const l of raw.split("\n")) {
+    if (l.startsWith("@")) { d = l.slice(1); continue; }
+    if (l.trim() && d) par.set(l, d);
+  }
+  return par;
+});
+
+const entree = (chemin) => entrees().get(chemin) || null;
 
 const gardeFou = () => surTete("veille", calculGardeFou);
 
@@ -347,13 +375,6 @@ function calculGardeFou() {
   }
   return { ...VEILLE, net: a - d };
 }
-
-// Quand un document est entré dans le dépôt. Le nom de fichier porte souvent la date,
-// mais pas toujours (`BACKLOG_PREP_AUDIT.md`), et il peut mentir. `--diff-filter=A` sur
-// tout l'historique la donne pour n'importe quel fichier, sans convention de nommage.
-const entree = (chemin) => surTete("entree:" + chemin, () =>
-  git("log", "--all", "--diff-filter=A", "--format=%ad", "--date=short", "--", chemin)
-    .split("\n").filter(Boolean).pop() || null);
 
 // ---------- collisions entre chantiers ----------
 // Deux chantiers qui ont touché les mêmes fichiers se marcheront dessus à la reprise.
@@ -501,6 +522,8 @@ async function index() {
 
 // ---------- assemblage ----------
 async function build() {
+  TETE = null;   // une lecture de HEAD par requête, pas une par clé de mémo
+
   const { jours, commits } = historique();
   const { chantiers, passes } = await pilotage();
   const liens = await index();
