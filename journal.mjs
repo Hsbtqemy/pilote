@@ -376,6 +376,47 @@ function calculGardeFou() {
   return { ...VEILLE, net: a - d };
 }
 
+// ---------- branches en vol ----------
+// Une branche n'existe à l'écran que si un chantier la porte, et un chantier n'est porté
+// que si un commit cite son code. Le travail qui échappe aux deux est invisible : mesuré
+// sur un dépôt réel, cinq commits de fonctionnalité sur quatorze en vol — de l'italique à
+// l'import, une borne sur un run d'alignement — qu'aucune fiche ne pouvait montrer.
+//
+// Ce n'est pas un défaut de l'outil mais de la discipline qu'il mesure : les sujets ne
+// citaient pas de code. C'est précisément ce qu'il doit rendre visible.
+//
+// Le test de « porté » réutilise ce qui existe : le motif des codes déclarés, et la table
+// fichiers-par-commit, dont un ensemble VIDE signale un commit qui n'a touché que le
+// dossier ou la documentation — de la tenue ou du cadrage, pas du travail à rattacher.
+function branchesEnVol(codes, parCommit) {
+  const brut = git("for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes");
+  const court = (r) => r.replace(/^[^/]+\//, "");
+  const estRef = (r) => REFS.includes(r) || REFS.includes(court(r));
+  const rx = codes.length ? rxCodes(codes) : null;
+  const par = new Map();
+
+  for (const ref of brut.split("\n").map(x => x.trim()).filter(Boolean)) {
+    if (!ref || ref.endsWith("/HEAD") || estRef(ref)) continue;
+    const liste = git("rev-list", "--format=%h\x1f%s", "--no-commit-header",
+                      ref, ...REFS.map(r => "^" + r))
+      .split("\n").filter(Boolean).map(l => { const [hash, sujet] = l.split("\x1f"); return { hash, sujet }; });
+    if (!liste.length) continue;   // fusionnée : rien à signaler
+
+    const orphelins = liste.filter(c =>
+      (parCommit.get(c.hash)?.size || 0) > 0 && !(rx && rx.test(c.sujet)));
+    const tete = git("log", "-1", "--format=%h\x1f%ad\x1f%s", "--date=short", ref).split("\x1f");
+    const e = { nom: ref, avance: liste.length, orphelins: orphelins.length,
+                exemples: orphelins.slice(0, 3).map(c => ({ hash: c.hash, sujet: c.sujet })),
+                dernier: { hash: tete[0], date: tete[1], sujet: tete[2] } };
+    // Locale et distante de même nom sont la même branche à deux tips. On garde la plus
+    // avancée plutôt que d'afficher deux lignes pour un seul travail.
+    const cle = court(ref);
+    const a = par.get(cle);
+    if (!a || e.avance > a.avance) par.set(cle, e);
+  }
+  return [...par.values()].sort((a, b) => b.orphelins - a.orphelins || b.avance - a.avance);
+}
+
 // ---------- collisions entre chantiers ----------
 // Deux chantiers qui ont touché les mêmes fichiers se marcheront dessus à la reprise.
 // La relation existe déjà dans les fiches, écrite à la main — et mesurée le 2026-08-25,
@@ -591,6 +632,8 @@ async function build() {
     liens[p.nom] ||= `#/qa/${encodeURIComponent(p.file)}`;
   }
 
+  const enVol = branchesEnVol(chantiers.map(c => c.code), parCommit);
+
   const depuis = new Date(Date.now() - DAYS * 864e5).toISOString().slice(0, 10);
   return {
     repo: (git("rev-parse", "--show-toplevel") || ROOT).split(/[\\/]/).pop(),
@@ -601,7 +644,7 @@ async function build() {
     dernierJour: jours[jours.length - 1] || null,
     silenceCourant: jours.length
       ? Math.round((Date.now() - Date.parse(jours[jours.length - 1])) / 864e5) : null,
-    chantiers, passes, liens, masses: mss,
+    chantiers, passes, liens, masses: mss, branches: enVol,
     veille: gardeFou(), controle: controleur(),
     commits: commits.filter(c => c.date >= depuis)
   };

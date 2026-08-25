@@ -578,6 +578,20 @@ function bandeBord(){
       `${e.codes.map(versFiche).join(" ")} <i>${e.portee.commits} commits sous ${e.ouverts} constats</i>`
     ).join(" · ") });
 
+  /* Le travail qu'aucune fiche ne peut montrer : des commits en vol dont le sujet ne
+     cite aucun code, et qui touchent autre chose que le dossier et la documentation.
+     Une branche entièrement couverte par ses chantiers ne paraît pas ici — elle n'a
+     rien de mauvais à signaler, et la règle de cette bande est qu'un chiffre n'y entre
+     que s'il peut l'être.
+     Les sujets des premiers orphelins passent en infobulle : « 5 sans fiche » dit qu'il
+     faut agir, pas SUR QUOI. */
+  const brVol = (D.branches || []).filter(b => b.orphelins > 0);
+  const perdus = brVol.reduce((n, b) => n + b.orphelins, 0);
+  if (perdus) l.push({ cle: "commits en vol sans fiche", val: String(perdus),
+    note: brVol.slice(0, 3).map(b =>
+      `<span title="${esc(b.exemples.map(e => e.hash + "  " + e.sujet).join("\n"))}">${esc(b.nom)}</span>
+       <i>${b.orphelins} sur ${b.avance}, jusqu'au ${jour(b.dernier.date)}</i>`).join(" · ") });
+
   /* Seul chiffre volontairement inerte : il est la somme des Reste de toutes les
      fiches, et sa destination est la liste qui suit déjà sur cet écran. */
   if (c?.nonCouvert) l.push({ cle: "items jamais confrontés", val: String(c.nonCouvert.items),
