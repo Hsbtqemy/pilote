@@ -241,7 +241,10 @@ a{color:var(--outremer)}
 .frise{margin:0 0 1.6rem}
 .fr-corps{position:relative}
 .fr-fond{position:absolute;inset:0 0 0 var(--gout);pointer-events:none}
-.fr-mois{position:absolute;top:0;bottom:0;width:1px;background:var(--verge)}
+/* `--verge` sert AUSSI de fond de page : le trait y était de la couleur exacte du fond,
+   donc présent dans le DOM et invisible à l écran. Compter les traits ne prouvait rien —
+   il fallait relever leur couleur. `currentColor` suit le texte, donc les deux thèmes. */
+.fr-mois{position:absolute;top:0;bottom:0;width:1px;background:currentColor;opacity:.13}
 .fr-l{display:grid;grid-template-columns:var(--gout) 1fr;align-items:center;
   min-height:1.55rem;position:relative}
 .fr-l+.fr-l{margin-top:.1rem}
@@ -268,8 +271,12 @@ a{color:var(--outremer)}
 .fr-lp .fr-c{padding-left:.7rem;font-size:.625rem;text-transform:none;letter-spacing:.02em;
   color:var(--encre3);font-weight:400}
 .fr-lp .fr-t{height:1.2rem}
-.fr-q{position:absolute;top:.45rem;height:.3rem;min-width:3px;border-radius:2px;
-  background:var(--outremer-pale);box-shadow:inset 0 0 0 1px var(--outremer)}
+/* Une passe est le plus souvent un INSTANT, pas une durée : écrite et rejouée dans la
+   même semaine, sa barre tombe à 3 px sur un axe de cent jours — mesuré, six sur huit.
+   Elle est donc dessinée pour être lisible en point comme en barre : plus haute, plus
+   large au minimum, et pleine plutôt que cernée. */
+.fr-q{position:absolute;top:.4rem;height:.42rem;min-width:7px;border-radius:3px;
+  background:var(--outremer);opacity:.5}
 /* Hors champ : le repère est antérieur au premier commit et se tient au bord gauche.
    Creux plutôt que plein — il dit « avant », pas « ici ». */
 /* Collé au bord, pas centré : un repère hors champ n'a pas de position réelle à
@@ -958,11 +965,13 @@ function vueFrise(){
     </div>
     <div class="fr-axe"><span></span><div>${
       mois.map(m => `<span class="fr-m${m.trait ? "" : " fr-m0"}" style="left:${pc(m.s)}%">${esc(m.nom)}</span>`).join("")}</div></div>
-    <p class="fr-leg"><b>barre pleine</b> premier → dernier commit de travail, la tenue du
-      dossier exclue · <b>barre claire</b> une passe de QA, de son entrée à sa dernière
-      rejoue · <b>losange</b> la fiche entre dans le dépôt · <b>trait bleu</b> l'audit entre
-      dans le dépôt · un repère <b>ouvert au bord gauche</b> est antérieur au premier
-      commit, donc hors champ</p>
+    <p class="fr-leg"><b>barre pleine</b> premier &rarr; dernier commit de travail, la
+      tenue du dossier exclue &middot; <b>point bleu</b> une passe de QA, de son entrée
+      à sa dernière rejoue &mdash; souvent un point plutôt qu'une barre, la
+      passe étant écrite et jouée dans la même semaine &middot;
+      <b>losange</b> la fiche entre dans le dépôt &middot; <b>trait fin</b>
+      l'audit entre dans le dépôt &middot; un repère <b>ouvert au bord
+      gauche</b> est antérieur au premier commit, donc hors champ</p>
   </div>`;
 }
 
