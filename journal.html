@@ -256,8 +256,25 @@ a{color:var(--outremer)}
 .fr-f{transform:translateX(-50%) rotate(45deg);height:.5rem;width:.5rem;top:.5rem;
   background:none;box-shadow:inset 0 0 0 1.5px var(--encre3);border-radius:1px}
 .fr-a{background:var(--outremer);width:2px}
+/* La passe se range sous son chantier : retrait, trait plus fin, teinte pâle — elle
+   accompagne la ligne au-dessus au lieu de rivaliser avec elle. */
+.fr-lp{min-height:1.2rem}
+.fr-lp .fr-c{padding-left:.7rem;font-size:.625rem;text-transform:none;letter-spacing:.02em;
+  color:var(--encre3);font-weight:400}
+.fr-lp .fr-t{height:1.2rem}
+.fr-q{position:absolute;top:.45rem;height:.3rem;min-width:3px;border-radius:2px;
+  background:var(--outremer-pale);box-shadow:inset 0 0 0 1px var(--outremer)}
+/* Hors champ : le repère est antérieur au premier commit et se tient au bord gauche.
+   Creux plutôt que plein — il dit « avant », pas « ici ». */
+/* Collé au bord, pas centré : un repère hors champ n'a pas de position réelle à
+   marquer, et le centrage le faisait dépasser de sa piste par la gauche. */
+.fr-avant{opacity:.55;transform:none}
+.fr-f.fr-avant{transform:rotate(45deg)}
+.fr-a.fr-avant{background:none;box-shadow:inset 0 0 0 1px var(--outremer);width:4px;
+  border-radius:1px}
 .fr-axe{display:grid;grid-template-columns:var(--gout) 1fr;margin-top:.35rem}
 .fr-axe>div{position:relative;height:1rem}
+.fr-m0{transform:none}
 .fr-m{position:absolute;top:0;font:400 var(--t1)/1 var(--mo);color:var(--encre3);
   transform:translateX(-50%);white-space:nowrap}
 .fr-leg{font:400 var(--t1)/1.5 var(--mo);color:var(--encre3);margin:.9rem 0 0}
@@ -771,22 +788,31 @@ function vueFil(){
 const JOUR = 864e5;
 
 function vueFrise(){
-  const dates = [];
-  for (const c of D.chantiers)
-    for (const d of [c.premier?.date, c.dernier?.date, c.auditDate, c.ficheDate]) if (d) dates.push(d);
-  // Les passes ne sont PAS dans l'échelle : elles ne sont pas dessinées ici, et une
-  // donnée qui étire l'axe sans y apparaître fabrique du vide qu'on ne sait pas lire.
-  if (!dates.length) return vide(
+  const t = d => Date.parse(d + "T00:00:00");
+  const toutes = [], travaux = [];
+  for (const c of D.chantiers) {
+    for (const d of [c.premier?.date, c.dernier?.date, c.auditDate, c.ficheDate]) if (d) toutes.push(d);
+    if (c.premier) travaux.push(c.premier.date);
+  }
+  for (const p of D.passes) for (const d of [p.entree, p.derniere]) if (d) toutes.push(d);
+  if (!toutes.length) return vide(
     `<p>Rien à situer dans le temps : aucun commit ne cite un code de chantier, et
      aucune fiche n'est encore entrée dans le dépôt.</p>`);
 
-  const t = d => Date.parse(d + "T00:00:00");
-  const a = Math.min(...dates.map(t));
-  const b = Math.max(Math.max(...dates.map(t)), t(D.dernierJour || new Date().toISOString().slice(0,10)));
-  /* Une marge d'un jour de chaque côté : sans elle, le premier commit du dépôt colle au
-     bord et se lit comme une troncature plutôt que comme un début. */
+  /* L'axe part du premier COMMIT, pas du premier document. Mesuré : les dates d'entrée
+     d'audits précédaient le travail de 33 jours, un quart de la largeur ne portant
+     aucune barre. Ce qui tombe avant n'est pas perdu — c'est marqué hors-champ au bord
+     gauche, avec sa vraie date au survol.
+     Le vide qui RESTE à l'intérieur (29 jours mesurés) n'est pas comprimé : il n'y en a
+     qu'un, il ne rapprocherait qu'un seul chantier, et une échelle brisée détruirait la
+     seule chose que cette vue sert à faire — comparer des durées. */
+  const a = travaux.length ? Math.min(...travaux.map(t)) : Math.min(...toutes.map(t));
+  const b = Math.max(...toutes.map(t), t(D.dernierJour || new Date().toISOString().slice(0, 10)));
+  /* Une marge d'un jour de chaque côté : sans elle, le premier commit colle au bord et
+     se lit comme une troncature plutôt que comme un début. */
   const lo = a - JOUR, amp = (b + JOUR) - lo;
-  const pc = d => ((t(d) - lo) / amp * 100).toFixed(2);
+  const avant = d => t(d) < lo;
+  const pc = d => Math.max(0, (t(d) - lo) / amp * 100).toFixed(2);
 
   /* Traits de mois. Le premier de chaque mois compris dans l'intervalle : les mois n'ont
      pas la même longueur, un dégradé répété ne tomberait pas juste. */
@@ -796,36 +822,65 @@ function vueFrise(){
        x.getTime() <= b + JOUR;
        x = new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 1, 1))) {
     const s = x.toISOString().slice(0, 10);
-    if (t(s) >= lo) mois.push({ s, nom: x.toLocaleDateString("fr-FR", { month: "short", timeZone: "UTC" }) });
+    const nom = x.toLocaleDateString("fr-FR", { month: "short", timeZone: "UTC" });
+    /* Le mois du début n'a pas son 1er dans l'intervalle : sans ce cas, la région la plus
+       à gauche reste sans étiquette et on ne sait pas où l'axe commence. Il est posé au
+       bord, sans trait de séparation. */
+    if (t(s) >= lo) mois.push({ s, nom, trait: true });
+    else if (!mois.length && t(s) + 32 * JOUR > lo) mois.push({ s: new Date(lo).toISOString().slice(0, 10), nom, trait: false });
   }
 
   const ordre = D.chantiers.slice().sort((x, y) =>
     String(x.premier?.date || x.ficheDate || "9999").localeCompare(String(y.premier?.date || y.ficheDate || "9999")));
 
+  const marque = (d, cls, quoi) => !d ? "" :
+    `<span class="${cls}${avant(d) ? " fr-avant" : ""}" style="left:${pc(d)}%"
+       title="${esc(quoi)} ${esc(d)}${avant(d) ? " — hors champ, avant le premier commit" : ""}"></span>`;
+
+  /* Les deux bornes sont remises dans l'ordre avant de tracer. Une passe peut porter une
+     `derniere` ANTÉRIEURE à l'entrée de son fichier — elle existait avant d'être migrée
+     dans le dossier — et la soustraction sortait alors une largeur négative, donc une
+     barre de 3 px posée du mauvais côté de sa propre date. Mesuré sur une passe de juillet
+     migrée en août. */
+  const barre = (dA, dB, cls, titre) => {
+    if (!dA && !dB) return "";
+    const [d1, d2] = [dA || dB, dB || dA].sort();
+    return `<span class="${cls}" style="left:${pc(d1)}%;width:max(3px,${(pc(d2) - pc(d1)).toFixed(2)}%)"
+       title="${esc(titre)}"></span>`;
+  };
+
   const ligne = c => {
     const p1 = c.premier?.date, p2 = c.dernier?.date;
-    const barre = p1 && p2
-      ? `<span class="fr-b" style="left:${pc(p1)}%;width:max(3px,${(pc(p2) - pc(p1)).toFixed(2)}%)"
-           title="${esc(p1)} → ${esc(p2)} · ${c.commits} commit${c.commits > 1 ? "s" : ""}"></span>` : "";
-    const fiche = c.ficheDate
-      ? `<span class="fr-f" style="left:${pc(c.ficheDate)}%" title="fiche écrite le ${esc(c.ficheDate)}"></span>` : "";
-    const audit = c.auditDate
-      ? `<span class="fr-a" style="left:${pc(c.auditDate)}%" title="audit entré le ${esc(c.auditDate)}"></span>` : "";
+    const t = `<div class="fr-t">${
+      p1 ? barre(p1, p2, "fr-b", `${p1} → ${p2} · ${c.commits} commit${c.commits > 1 ? "s" : ""}`) : ""
+      }${marque(c.ficheDate, "fr-f", "fiche écrite le")}${marque(c.auditDate, "fr-a", "audit entré le")}</div>`;
     return `<div class="fr-l s-${slug(c.statut)}">
-      <a class="fr-c" href="#/c/${encodeURIComponent(c.code)}">${esc(c.code)}</a>
-      <div class="fr-t">${barre}${fiche}${audit}</div></div>`;
+      <a class="fr-c" href="#/c/${encodeURIComponent(c.code)}">${esc(c.code)}</a>${t}</div>`;
   };
+
+  /* Une passe se range SOUS son chantier : c'est déjà la relation que porte son propre
+     `chantier:`, et la poser en glyphe de plus sur la ligne du chantier les empilait —
+     trois passes de R3, dont deux à la même date. Sa barre va de son entrée à sa
+     dernière rejoue : une passe écrite il y a deux mois et rejouée hier ne raconte pas
+     la même chose qu'une passe écrite et jouée le même jour. */
+  const ligneP = p => `<div class="fr-l fr-lp">
+    <a class="fr-c" href="#/qa/${encodeURIComponent(p.file)}">${esc(p.nom)}</a>
+    <div class="fr-t">${barre(p.entree, p.derniere, "fr-q",
+      `${p.entree || "?"} → ${p.derniere || "jamais rejouée"} · ${p.faits}/${p.total}`)}</div></div>`;
 
   return `<div class="frise">
     <div class="fr-corps">
-      <div class="fr-fond">${mois.map(m => `<span class="fr-mois" style="left:${pc(m.s)}%"></span>`).join("")}</div>
-      ${ordre.map(ligne).join("")}
+      <div class="fr-fond">${mois.filter(m => m.trait).map(m => `<span class="fr-mois" style="left:${pc(m.s)}%"></span>`).join("")}</div>
+      ${ordre.map(c => ligne(c) + D.passes.filter(p => p.chantier === c.code).map(ligneP).join("")).join("")}
+      ${D.passes.filter(p => !p.chantier).map(ligneP).join("")}
     </div>
     <div class="fr-axe"><span></span><div>${
-      mois.map(m => `<span class="fr-m" style="left:${pc(m.s)}%">${esc(m.nom)}</span>`).join("")}</div></div>
-    <p class="fr-leg"><b>barre</b> premier → dernier commit de travail (la tenue du dossier
-      est exclue) · <b>losange</b> la fiche entre dans le dépôt · <b>trait bleu</b> l'audit
-      entre dans le dépôt</p>
+      mois.map(m => `<span class="fr-m${m.trait ? "" : " fr-m0"}" style="left:${pc(m.s)}%">${esc(m.nom)}</span>`).join("")}</div></div>
+    <p class="fr-leg"><b>barre pleine</b> premier → dernier commit de travail, la tenue du
+      dossier exclue · <b>barre claire</b> une passe de QA, de son entrée à sa dernière
+      rejoue · <b>losange</b> la fiche entre dans le dépôt · <b>trait bleu</b> l'audit entre
+      dans le dépôt · un repère <b>ouvert au bord gauche</b> est antérieur au premier
+      commit, donc hors champ</p>
   </div>`;
 }
 

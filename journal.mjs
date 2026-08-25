@@ -443,6 +443,10 @@ async function build() {
   // encore jouée » ne durait qu'une journée et sortait de l'écran le lendemain.
   for (const p of passes) {
     p.silence = p.derniere ? joursActifs(jours, p.derniere) : null;
+    // Quand la passe est entrée dans le dépôt. Avec `derniere`, ça donne la durée
+    // pendant laquelle elle a été en jeu — une passe écrite il y a deux mois et rejouée
+    // hier ne raconte pas la même chose qu'une passe écrite et jouée le même jour.
+    p.entree = entree(p.file);
     liens[p.nom] ||= `#/qa/${encodeURIComponent(p.file)}`;
   }
 
