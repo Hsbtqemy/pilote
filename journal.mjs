@@ -338,6 +338,13 @@ function calculGardeFou() {
   return { ...VEILLE, net: a - d };
 }
 
+// Quand un document est entré dans le dépôt. Le nom de fichier porte souvent la date,
+// mais pas toujours (`BACKLOG_PREP_AUDIT.md`), et il peut mentir. `--diff-filter=A` sur
+// tout l'historique la donne pour n'importe quel fichier, sans convention de nommage.
+const entree = (chemin) => surTete("entree:" + chemin, () =>
+  git("log", "--all", "--diff-filter=A", "--format=%ad", "--date=short", "--", chemin)
+    .split("\n").filter(Boolean).pop() || null);
+
 // ---------- contrôleur du dossier ----------
 // `pilotage/verifier.mjs` s'exécute au chargement et sort par process.exit : on le
 // lance en processus fils plutôt que de l'importer. Code de retour non nul = il a
@@ -401,6 +408,16 @@ async function build() {
     const liste = commitsDuChantier(commits, codes, proprietaire, tenue);
     const last = liste[0] || null;
     ch.dernier = last ? { hash: last.hash, date: last.date, sujet: last.sujet } : null;
+    // L'autre borne. `dernier` seul ne distingue pas un sprint de trois jours d'une
+    // tresse de deux mois : mesuré, deux chantiers affichaient une carte identique pour
+    // 7 commits en 3 jours d'un côté, 9 commits sur 64 jours de l'autre.
+    const first = liste[liste.length - 1] || null;
+    ch.premier = first ? { hash: first.hash, date: first.date } : null;
+    ch.auditDate = ch.audit ? entree(ch.audit) : null;
+    // Quand la fiche elle-même est entrée. Sans elle, un chantier `à venir` n'a aucune
+    // marque sur l'axe du temps : pas de commit, donc pas de barre, donc invisible là où
+    // il est justement le plus utile de le voir — récent et pas commencé.
+    ch.ficheDate = entree(ch.file);
     ch.silence = last ? joursActifs(jours, last.date) : null;
     const f = last ? fr.find(x => x.hashes.has(last.full)) : null;
     ch.front = f ? { ref: f.nom, integre: f.integre } : null;
