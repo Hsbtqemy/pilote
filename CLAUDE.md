@@ -26,6 +26,10 @@ ces sections.
 - Le commit de code d'abord, le commit de fiche ensuite, **séparément** : une fiche
   ne peut pas citer le commit qui la met à jour, et les commits qui ne touchent que
   `pilotage/` sont exclus du datage.
+- **Le commit de code doit CITER le code du chantier**, dans son sujet ou son corps.
+  Un chantier n'est daté que par les commits qui le citent ET qui touchent autre chose
+  que `pilotage/` — les deux à la fois. Sans citation, la fiche affiche `0 commit`,
+  aucune date, aucune barre sur la fresque, quel que soit le travail fait.
 - Avant de clore une session : `node pilotage/verifier.mjs` (code de retour non nul
   = l'outil lira mal le dossier ; `--strict` rend les avertissements bloquants).
 - QA visuelle : écrire une passe dans `pilotage/qa/`, jamais dans le fil de

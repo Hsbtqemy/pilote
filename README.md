@@ -98,6 +98,12 @@ contre-intuitif et c'est la règle la plus importante : une fiche ne peut pas ci
 commit qui la met à jour, et les commits qui ne touchent que `pilotage/` sont exclus du
 datage des chantiers. Les fusionner casse les deux mécanismes à la fois.
 
+**1 bis. Le commit de code cite le code du chantier.** Un chantier n'est daté que par
+les commits qui le citent ET qui sortent de `pilotage/` — les deux à la fois. Mesuré sur
+le dépôt d'où vient l'outil : un chantier entièrement traité, deux commits de code, aucun
+ne citant son code — `0 commit`, aucune date, aucune barre sur la fresque. Le travail
+existait, le journal ne pouvait pas le voir.
+
 **2. Une case = une affirmation vérifiable, avec son attendu.** « Vérifier le rendu » ne
 se coche pas : ça se contemple. « Sur 375 px, la barre ne masque pas le geste » se coche.
 
