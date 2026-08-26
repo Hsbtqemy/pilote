@@ -119,11 +119,27 @@ for (const c of chantiers) {
     warn(C3, c.rel, `${ouverts} item(s) ouvert(s) sans \`audit:\` — la source des constats n'est pas atteignable depuis l'écran`);
 }
 
-// ── contrôle 4 — constats d'audit sans item correspondant ────────────────────
-// Un constat ouvert qui n'est cité dans aucun `Reste` n'existe pas pour qui planifie
-// depuis le journal : il ne vit que dans `docs/`. Mesuré une fois : douze constats
-// dans ce cas sur un même audit, dont cinq sérieux.
-const C4 = "constats sans item";
+// ── contrôle 4 — constats d'audit qu'aucun item ouvert ne cite ───────────────
+// Un constat ouvert que ne cite AUCUN item ouvert du `Reste` n'existe pas pour qui
+// planifie depuis le journal : il ne vit que dans `docs/`. Mesuré une fois : douze
+// constats dans ce cas sur un même audit, dont cinq sérieux.
+//
+// Ce contrôle mesure la CITATION, et rien d'autre. Il a longtemps dit « sans item »,
+// ce qui laissait entendre que le complément — les constats cités — était pris en
+// charge. Mesuré sur un dépôt jetable : un unique item ouvert disant « aucun de ces
+// constats n'a de plan » et citant les dix codes rendait « sans item : 0 » suivi de
+// « les quatre contrôles mécaniques passent ». Le contrôle mesurait sa propre
+// négation, et la partie qui trompait n'était pas le chiffre mais la ligne verte.
+//
+// Tranché le 2026-08-26 par la voie de `reconnu` et de `gitEssai` : le contrôle
+// n'affirme que ce qu'il mesure — `non cités` — et la prise en charge descend avec
+// les items dans le bloc NON COUVERT, qui existe pour ça.
+//
+// PAS d'heuristique de recensement (« un item qui cite dix codes n'est pas un plan »).
+// Elle attrape le cas mesuré et ne prouve rien, son seuil serait arbitraire, et une
+// fois le mot juste écrit elle n'achète plus rien : le compte des cités monte dans
+// NON COUVERT et grandit avec le problème, ce qu'un seuil ne fait pas.
+const C4 = "constats non cités";
 const audits = {};   // exploitable par l'écran : compte par audit et par sévérité
 for (const c of chantiers) {
   if (!c.fm.audit) continue;
@@ -146,24 +162,26 @@ for (const c of chantiers) {
   // et le premier défaut que ce script a trouvé chez lui-même le 2026-08-20
   // (AUDIT_2026-06-12 et trois autres).
   const { reconnu, constats } = constatsAudit(texte);
-  const parSeverite = {}, sansItem = [];
+  const parSeverite = {}, nonCites = [];
   let total = 0;
   for (const { code, sev, ouvert } of constats) {
     if (!ouvert) continue;                            // ✅ ou barré : clos
     total++;
     parSeverite[sev] = (parSeverite[sev] || 0) + 1;
-    if (!reste.includes(code)) sansItem.push({ code, sev });
+    if (!reste.includes(code)) nonCites.push({ code, sev });
   }
-  audits[c.fm.audit] = { chantier: c.fm.chantier, reconnu, total, parSeverite, sansItem: sansItem.length, sansItemCodes: sansItem.map(f => f.code) };
+  audits[c.fm.audit] = { chantier: c.fm.chantier, reconnu, total, parSeverite,
+                         nonCites: nonCites.length, nonCitesCodes: nonCites.map(f => f.code),
+                         cites: total - nonCites.length };
   if (!reconnu) {
     warn(C4, c.rel,
       `${c.fm.audit} : aucun tableau de constats reconnu (forme attendue : « | CODE-00 | sévérité | … »)`
       + " — le compte affiché n'est pas 0, il est INCONNU");
   }
-  if (sansItem.length) {
-    const oranges = sansItem.filter(f => f.sev.includes("🔴") || f.sev.includes("🟠")).map(f => f.code);
+  if (nonCites.length) {
+    const oranges = nonCites.filter(f => f.sev.includes("🔴") || f.sev.includes("🟠")).map(f => f.code);
     warn(C4, c.rel,
-      `${sansItem.length} constat(s) ouvert(s) de ${c.fm.audit} sans item dans le Reste`
+      `${nonCites.length} constat(s) ouvert(s) de ${c.fm.audit} qu'aucun item ouvert du Reste ne cite`
       + (oranges.length ? ` — dont ${oranges.length} 🔴/🟠 : ${oranges.join(", ")}` : ""));
   }
 }
@@ -171,15 +189,21 @@ for (const c of chantiers) {
 // ── le contrôle qui manque ───────────────────────────────────────────────────
 const itemsOuverts = chantiers.reduce(
   (n, c) => n + c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste" && !b.fait).length, 0);
+// Le complément du contrôle 4, et il n'est pas une bonne nouvelle : un constat CITÉ
+// par un item n'est pas un constat pris en charge. Ce compte grandit avec le problème
+// — un item qui recense dix codes en cite dix — là où un seuil aurait été arbitraire.
+const constatsCites = Object.values(audits).filter(a => a.reconnu).reduce((n, a) => n + a.cites, 0);
 
 // ── sortie ───────────────────────────────────────────────────────────────────
 if (JSON_) {
   console.log(JSON.stringify({
     chantiers: chantiers.length, passes: passes.length,
     erreurs, avertissements, audits,
-    nonCouvert: { controle: "confrontation des items au code", items: itemsOuverts }
+    nonCouvert: { controle: "confrontation des items au code", items: itemsOuverts,
+                  constatsCites }
   }, null, 2));
 } else {
+  const pl    = (n) => n > 1 ? "s" : "";
   const ligne = (x) => `   ${x.file}  ${x.msg}`;
   const bloc = (titre, xs) => {
     if (!xs.length) return;
@@ -199,14 +223,23 @@ if (JSON_) {
     for (const [f, a] of Object.entries(audits)) {
       if (!a.reconnu) { console.log(`   ${f}  (${a.chantier})  format non reconnu — compte INCONNU`); continue; }
       const detail = Object.entries(a.parSeverite).map(([s, n]) => `${s}${n}`).join(" ");
-      console.log(`   ${f}  (${a.chantier})  ${a.total} ouvert(s)  ${detail}  · sans item : ${a.sansItem}`);
+      console.log(`   ${f}  (${a.chantier})  ${a.total} ouvert(s)  ${detail}  · non cités : ${a.nonCites}`);
     }
   }
 
-  // Le manque, en dernier et en toutes lettres.
-  console.log(`\nNON COUVERT — confrontation des ${itemsOuverts} items au code : à faire à la main.`);
-  console.log("   Aucun contrôle mécanique ne peut dire si « X est absent » est encore vrai :");
-  console.log("   il faut ouvrir le fichier que la phrase désigne.");
+  // Le manque, en dernier et en toutes lettres. Deux entrées et non plus une : le
+  // contrôle 4 rend « non cités », jamais « non couverts », et l'écart entre les deux
+  // est exactement ce qui reste à lire.
+  console.log("\nNON COUVERT — à faire à la main.");
+  console.log(`   · les ${itemsOuverts} item${pl(itemsOuverts)} du Reste, face au code. Aucun contrôle mécanique`);
+  console.log("     ne peut dire si « X est absent » est encore vrai : il faut ouvrir le");
+  console.log("     fichier que la phrase désigne.");
+  if (constatsCites) {
+    console.log(`   · les ${constatsCites} constat${pl(constatsCites)} CITÉ${pl(constatsCites)} par un item ouvert. Citer n'est pas`);
+    console.log("     prendre en charge : un item qui recense dix codes pour dire qu'aucun");
+    console.log("     n'a de plan les cite tous, et « non cités » rend alors 0 — ce qui est");
+    console.log("     vrai, et ne dit rien de la couverture.");
+  }
 }
 
 const echec = erreurs.length > 0 || (STRICT && avertissements.length > 0);

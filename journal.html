@@ -656,14 +656,24 @@ function bandeBord(){
   const rec = Object.values(c?.audits || {}).filter(a => a.reconnu);
   if (rec.length) {
     const sev = {}; let tot = 0, sans = 0;
-    for (const a of rec) { tot += a.total; sans += a.sansItem;
+    for (const a of rec) { tot += a.total; sans += a.nonCites;
       for (const [s, n] of Object.entries(a.parSeverite || {})) sev[s] = (sev[s] || 0) + n; }
     // Dire OÙ vivent les 17 : sans la ventilation par fiche, le total ne mène nulle part.
     const par = rec.filter(a => a.total).sort((x, y) => y.total - x.total)
       .map(a => `${versFiche(a.chantier)} ${a.total}`).join(", ");
     l.push({ cle: "constats d'audit ouverts", val: String(tot),
       note: Object.entries(sev).map(([s, n]) => s + n).join(" ") + ` · ${par}`
-          + (sans ? ` · ${sans} sans item` : "") });
+          + (sans ? ` · ${sans} non cités` : "") });
+    /* Le complément de « non cités », et il n'est pas une bonne nouvelle. Le contrôleur
+       mesure la CITATION, jamais la prise en charge : un item ouvert qui recense dix
+       codes pour dire qu'aucun n'a de plan les cite tous, et rend « non cités : 0 ».
+       La ligne est jumelle de « items jamais confrontés » juste au-dessus, et pour la
+       même raison — un chiffre inerte qui nomme un travail que rien ne peut faire à
+       notre place. Il vaut mieux ici qu'un seuil de recensement : il grandit avec le
+       problème au lieu de se déclencher sur une limite qu'aucune mesure ne justifie. */
+    const cites = tot - sans;
+    if (cites) l.push({ cle: "constats cités, jamais confrontés", val: String(cites),
+      note: "à l'item qui les cite — citer n'est pas prendre en charge" });
   }
 
   const av = c?.avertissements || [];
@@ -676,7 +686,7 @@ function bandeBord(){
       <span class="b-n">${x.note}</span></div>`).join("")}</div>
     ${!av.length ? "" : `<div class="avs">${
       /* Groupés par FORME du reproche, pas par nom de contrôle. Grouper sur `ctl`
-         mettait « aucun tableau reconnu » et « un constat sans item » dans le même
+         mettait « aucun tableau reconnu » et « un constat non cité » dans le même
          sac, et n'affichait que l'étiquette du contrôle — le lecteur voyait un nom
          de règle, jamais ce qu'elle reproche. On normalise les nombres et les
          chemins, ce qui reste est la phrase commune. */
