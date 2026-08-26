@@ -26,5 +26,6 @@ ces sections.
 - Ne jamais cocher soi-même une case d'une passe de QA.
 - Ne pas créer de fichier pour un finding traité en un seul commit.
 
-Le journal se lit avec `pilote` puis `localhost:4123` (git + `pilotage/`, lecture
+Le journal se lit avec `pilote` puis `localhost:4123` — la commande est idempotente,
+se retaper sans vérifier si un serveur tourne est le geste prévu (`pilote arreter` ferme) (git + `pilotage/`, lecture
 seule sauf les cases, dont l'écriture est bornée à `pilotage/`).

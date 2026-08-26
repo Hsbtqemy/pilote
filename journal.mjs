@@ -2,12 +2,13 @@
 // Journal de bord — serveur local.
 //   pilote            [--port 4123] [--dir pilotage] [--days 60]
 //   pilote verifier   [--dir pilotage] [--strict] [--json]
+//   pilote arreter    [--port 4123]
 // Aucune dépendance. Node 18+.
 
-import { createServer } from "node:http";
+import { createServer, get as httpGet } from "node:http";
 import { execFileSync } from "node:child_process";
 import { readFile, writeFile, readdir } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, relative, basename, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 // Contrat de parsing partage avec pilotage/verifier.mjs -- voir journal-contrat.mjs.
@@ -56,6 +57,78 @@ const TRAINEE = Number(opt("trainee", 5));
 // `process.argv` lui-même et trouve ses drapeaux par nom : le mot `verifier` en tête ne
 // le gêne pas. Il finit sur `process.exit`, donc l'import ne rend jamais la main.
 if (args[0] === "verifier") await import(pathToFileURL(join(OUTIL, "pilotage/verifier.mjs")).href);
+
+// ---------- lancer sans avoir à y penser ----------
+// `pilote` doit pouvoir se taper à tout moment. Avant, `.listen()` sur un port déjà pris
+// crachait douze lignes de pile Node (`EADDRINUSE`) qui ne distinguaient même pas les
+// trois situations : ton propre journal déjà en route — le cas courant, et il n'y a rien
+// à faire —, une version périmée de l'outil, ou un autre programme sur le port.
+//
+// L'empreinte est le mtime des trois fichiers de l'outil. Un serveur en cours garde
+// `journal.mjs` en mémoire ; seul `journal.html` est relu à chaque requête. Une mise à
+// jour du paquet laisse donc un moteur ancien servir une vue neuve. La vue affiche déjà
+// un bandeau quand elle le détecte, mais après coup — ici c'est réglé au lancement.
+const empreinte = () => ["journal.mjs", "journal.html", "journal-contrat.mjs"]
+  .map(f => { try { return Math.round(statSync(join(OUTIL, f)).mtimeMs); } catch { return 0; } })
+  .join("-");
+
+// FIGÉE AU DÉMARRAGE, et c'est tout l'intérêt. Un serveur qui recalculerait son
+// empreinte à chaque requête lirait le disque courant — donc exactement ce que lit le
+// lanceur, donc toujours d'accord avec lui, donc incapable de se dire périmé. Première
+// version écrite ainsi : mettre l'outil à jour puis relancer répondait « déjà en route »
+// et laissait tourner le vieux moteur, ce que la fonction était censée empêcher.
+// Ici la valeur dit « voilà l'outil que j'ai CHARGÉ », qui est la seule chose vraie
+// d'un processus en cours.
+const EMPREINTE = empreinte();
+
+// Sonde en `node:http` brut, délibérément : il ne lit pas `HTTP_PROXY`, contrairement à
+// la plupart des clients. Un proxy d'entreprise qui intercepte la boucle locale
+// répondrait à la place du serveur, et la sonde mentirait.
+const sonde = (port) => new Promise(resolve => {
+  const req = httpGet({ host: "127.0.0.1", port, path: "/pilote", timeout: 900 },
+    res => { let b = ""; res.on("data", c => b += c);
+             res.on("end", () => { try { resolve(JSON.parse(b)); } catch { resolve(null); } }); });
+  req.on("error", () => resolve(null));
+  req.on("timeout", () => { req.destroy(); resolve(null); });
+});
+
+let enRoute = await sonde(PORT);
+
+if (args[0] === "arreter") {
+  if (!enRoute) { console.log(`Rien ne tourne sur le port ${PORT}.`); process.exit(0); }
+  // `arreter` agit sur un PORT, pas sur un dépôt : on peut fermer depuis n'importe où,
+  // ce qui est le geste utile quand on a oublié d'où on l'avait lancé. Mais fermer le
+  // journal d'un autre dépôt sans le dire serait une surprise — donc on le nomme.
+  if (enRoute.racine !== ROOT) console.log(`Ce port sert le journal d'un autre dépôt : ${enRoute.racine}`);
+  try { process.kill(enRoute.pid); console.log(`Journal arrêté — port ${PORT}, pid ${enRoute.pid}.`); }
+  catch (e) { console.error(`Impossible d'arrêter le pid ${enRoute.pid} : ${e.message}`); process.exit(1); }
+  process.exit(0);
+}
+
+if (enRoute && enRoute.racine !== ROOT) {
+  console.error(`Le port ${PORT} sert déjà le journal d'un AUTRE dépôt :`);
+  console.error(`  ${enRoute.racine}`);
+  console.error(`Relance avec --port sur un autre numéro,`);
+  console.error(`ou ferme celui-là par « pilote arreter --port ${PORT} » — qui marche d'ici.`);
+  process.exit(1);
+}
+
+if (enRoute && enRoute.empreinte === empreinte()) {
+  // De loin le cas le plus fréquent, et le seul qui plantait bruyamment pour rien.
+  console.log(`Journal déjà en route  →  http://localhost:${PORT}`);
+  console.log(`${ROOT}  ·  ${enRoute.dir}/  ·  pid ${enRoute.pid}  ·  « pilote arreter » pour le fermer`);
+  process.exit(0);
+}
+
+if (enRoute) {
+  // Même dépôt, outil différent : c'est le « serveur périmé » que la vue signale trop
+  // tard. On le remplace, puisque personne d'autre ne s'en sert.
+  console.log(`Serveur périmé sur le port ${PORT} (outil mis à jour depuis) — on le remplace.`);
+  try { process.kill(enRoute.pid); } catch { /* déjà mort : tant mieux */ }
+  // Attendre qu'il lâche vraiment le port : tuer est asynchrone, et se précipiter sur
+  // `.listen()` redonnerait l'EADDRINUSE qu'on vient de supprimer.
+  for (let i = 0; i < 60 && await sonde(PORT); i++) await new Promise(r => setTimeout(r, 50));
+}
 
 // ---------- ce que le journal sait de ce dépôt ----------
 // Tout ce qui nomme des chemins, des fichiers ou des codes vit dans
@@ -738,6 +811,14 @@ createServer(async (req, res) => {
     } catch (e) { return send(400, "application/json", JSON.stringify({ error: e.message })); }
   }
 
+  // Carte d'identité du serveur, pour la sonde de lancement. Volontairement SANS git ni
+  // lecture du dossier : elle doit répondre en quelques millisecondes, là où
+  // `/journal.json` demande près d'une seconde. C'est ce qui permet à `pilote` d'être
+  // idempotent sans que le coût se voie.
+  if (req.url === "/pilote")
+    return send(200, "application/json",
+      JSON.stringify({ pilote: true, racine: ROOT, dir: DIR, empreinte: EMPREINTE, pid: process.pid }));
+
   if (req.url.startsWith("/journal.json")) {
     try { return send(200, "application/json", JSON.stringify(await build())); }
     catch (e) { return send(500, "application/json", JSON.stringify({ error: e.message })); }
@@ -745,7 +826,17 @@ createServer(async (req, res) => {
 
   if (!existsSync(HTML)) return send(404, "text/plain; charset=utf-8", "journal.html introuvable");
   send(200, "text/html; charset=utf-8", await readFile(HTML));
-}).listen(PORT, () => {
-  console.log(`Journal de bord  →  http://localhost:${PORT}`);
-  console.log(`${ROOT}  ·  ${DIR}/  ·  ${DAYS} jours de commits`);
-});
+})
+  // La sonde a pu dire « libre » et quelqu'un prendre le port entre-temps, ou le port
+  // être tenu par un programme qui n'est pas un journal : dans les deux cas la sonde ne
+  // pouvait rien dire d'utile. Ici on sait au moins que ce n'est pas nous.
+  .on("error", e => {
+    if (e.code !== "EADDRINUSE") throw e;
+    console.error(`Le port ${PORT} est occupé par un programme qui n'est pas un journal.`);
+    console.error(`Relance avec --port sur un autre numéro.`);
+    process.exit(1);
+  })
+  .listen(PORT, () => {
+    console.log(`Journal de bord  →  http://localhost:${PORT}`);
+    console.log(`${ROOT}  ·  ${DIR}/  ·  ${DAYS} jours de commits  ·  « pilote arreter » pour le fermer`);
+  });

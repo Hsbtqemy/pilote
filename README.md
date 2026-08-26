@@ -18,7 +18,15 @@ et pour l'agent qui travaille dans le même dépôt.
 ```bash
 npx github:Hsbtqemy/pilote            # le journal, sur localhost:4123
 npx github:Hsbtqemy/pilote verifier   # le contrôleur du dossier
+npx github:Hsbtqemy/pilote arreter    # fermer le journal
 ```
+
+**La commande du journal se retape sans réfléchir.** Elle sonde le port avant d'écouter
+et fait ce qu'il faut : rien ne tourne, elle démarre ; ton journal tourne déjà, elle
+donne l'adresse et sort en 165 ms sans relire le dépôt ; l'outil a été mis à jour depuis,
+elle remplace le serveur périmé ; le port sert un AUTRE dépôt ou un autre programme, elle
+le dit et nomme le coupable. Aucun de ces cas ne coûte plus cher qu'avant — la sonde est
+un aller-retour sur la boucle locale, et le démarrage à froid reste à 250 ms.
 
 Le serveur écoute sur `localhost:4123`. Options : `--port`, `--dir` (défaut `pilotage`),
 `--days`, `--refs`, `--trainee`. Le contrôleur prend `--dir`, `--strict`, `--json`.
@@ -28,8 +36,9 @@ copie locale. C'est bon pour essayer, mauvais pour un dépôt dont tu ouvres le 
 tous les jours. Là, prends-le en dépendance :
 
 ```json
-{ "devDependencies": { "pilote": "github:Hsbtqemy/pilote" },
-  "scripts": { "journal": "pilote", "verifier": "pilote verifier" } }
+{ "devDependencies": { "pilote": "git+https://github.com/Hsbtqemy/pilote.git" },
+  "scripts": { "journal": "pilote", "verifier": "pilote verifier",
+               "arreter": "pilote arreter" } }
 ```
 
 Rien n'est copié dans ton projet, sauf ce que tu écris toi-même : le dossier `pilotage/`
