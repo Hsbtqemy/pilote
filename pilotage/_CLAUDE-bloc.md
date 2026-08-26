@@ -27,5 +27,6 @@ ces sections.
 - Ne pas créer de fichier pour un finding traité en un seul commit.
 
 Le journal se lit avec `pilote` puis `localhost:4123` — la commande est idempotente,
-se retaper sans vérifier si un serveur tourne est le geste prévu (`pilote arreter` ferme) (git + `pilotage/`, lecture
+se retaper sans vérifier si un serveur tourne est le geste prévu (`pilote arreter` ferme,
+`pilote aide` liste tout) (git + `pilotage/`, lecture
 seule sauf les cases, dont l'écriture est bornée à `pilotage/`).

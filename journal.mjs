@@ -47,6 +47,54 @@ const OUTIL = dirname(fileURLToPath(import.meta.url));
 // Longueur de la traînée de commits affichée sur une fiche.
 const TRAINEE = Number(opt("trainee", 5));
 
+// L'aide vient EN PREMIER : elle ne sonde aucun port, ne lit ni git ni le dossier, et
+// répond même dans un répertoire qui n'est pas un dépôt. Sans elle, `pilote --help`
+// ignorait le drapeau et lançait le serveur — on demandait la liste des commandes et on
+// obtenait autre chose, ce qui est la pire réponse possible à une question de débutant.
+//
+// C'est aussi le SEUL endroit qui liste tout. Le README et le bloc CLAUDE en montrent ce
+// qui sert à démarrer et renvoient ici : trois listes à tenir à jour en donneraient deux
+// de fausses.
+if (args.includes("--help") || args.includes("-h") || args[0] === "aide") {
+  console.log(`pilote — journal de bord local. Confronte un dossier pilotage/ à ce que git montre.
+
+COMMANDES
+  pilote                ouvre le journal sur localhost:4123
+  pilote arreter        ferme le journal
+  pilote verifier       contrôle le dossier ; code de retour non nul = l'outil lira mal
+  pilote aide           ceci  (aussi --help, -h)
+
+OPTIONS DU JOURNAL
+  --port <n>        défaut 4123
+  --dir <nom>       dossier des fiches, défaut « pilotage »
+  --days <n>        fenêtre de commits lue, en jours ; défaut 60
+  --refs <a,b,c>    refs d'intégration, de l'amont vers l'aval, séparées par des virgules ;
+                    défaut : celles de l'inventaire, sinon origin/main
+  --trainee <n>     commits affichés sous une fiche, défaut 5
+
+OPTIONS DU CONTRÔLEUR
+  --dir <nom>       comme ci-dessus
+  --strict          un avertissement suffit alors à faire échouer
+  --json            sortie machine plutôt que lisible
+
+LANCER
+  La commande du journal se retape sans vérifier si un serveur tourne. Elle sonde le port
+  et agit : rien ne tourne, elle démarre ; ton journal tourne déjà, elle donne l'adresse
+  et sort ; l'outil a été mis à jour depuis, elle remplace le serveur périmé ; le port
+  sert un autre dépôt ou un autre programme, elle le dit et le nomme.
+
+CE QUI VIT DANS TON DÉPÔT, PAS DANS L'OUTIL
+  pilotage/<CODE>.md           une fiche de chantier
+  pilotage/qa/<nom>.md         une passe de QA rejouable
+  pilotage/_TEMPLATE.md        le gabarit, qui décrit le contrat
+  pilotage/journal.config.mjs  l'inventaire — facultatif ; sans lui on perd les masses
+                               par aire, la veille à seuil et les liens code → document
+
+  Le journal est en LECTURE SEULE, sauf les cases à cocher, dont l'écriture est bornée
+  au dossier des fiches.`);
+  process.exit(0);
+}
+
 // Un seul point d'entrée. Le dépôt hôte n'a plus à héberger l'outil : ni le serveur,
 // ni la vue, ni le contrat, ni le contrôleur — qui vivait dans `pilotage/` mais
 // importait `../journal-contrat.mjs`, ce qui rendait les quatre fichiers indissociables

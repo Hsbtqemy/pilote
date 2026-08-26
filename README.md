@@ -28,8 +28,15 @@ elle remplace le serveur périmé ; le port sert un AUTRE dépôt ou un autre pr
 le dit et nomme le coupable. Aucun de ces cas ne coûte plus cher qu'avant — la sonde est
 un aller-retour sur la boucle locale, et le démarrage à froid reste à 250 ms.
 
-Le serveur écoute sur `localhost:4123`. Options : `--port`, `--dir` (défaut `pilotage`),
-`--days`, `--refs`, `--trainee`. Le contrôleur prend `--dir`, `--strict`, `--json`.
+Le serveur écoute sur `localhost:4123`.
+
+```bash
+npx github:Hsbtqemy/pilote aide       # la liste complète : commandes, options, conventions
+```
+
+C'est le seul endroit qui liste tout, et il est vérifié contre le code — aucun drapeau
+annoncé qui n'existe pas, aucun drapeau réel passé sous silence. Ce README n'en redit que
+le nécessaire pour démarrer : trois listes à tenir à jour en donneraient deux de fausses.
 
 `npx` va rechercher l'outil à chaque lancement : mesuré, **4,3 s contre 0,4 s** pour une
 copie locale. C'est bon pour essayer, mauvais pour un dépôt dont tu ouvres le journal
