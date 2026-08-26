@@ -12,26 +12,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, relative, basename, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 // Contrat de parsing partage avec pilotage/verifier.mjs -- voir journal-contrat.mjs.
-import { RX, frontmatter, walk, estPasse, constatsAudit } from "./journal-contrat.mjs";
+import { RX, frontmatter, walk, estPasse, constatsAudit, texteDeCase } from "./journal-contrat.mjs";
 
-// Une case peut tenir sur plusieurs lignes : les suivantes sont indentees, et ne sont
-// ni une autre case ni un titre. Le parseur, ligne a ligne, les jetait EN SILENCE --
-// ce qui coupait l'item a sa moitie « attendu ». Mesure le 2026-08-21 sur le dossier :
-// 21 cases tronquees, dont 15 DEJA COCHEES. L'une d'elles, cochee, se lisait « Croiser
-// une portee vide — document X et langue fr — » sans plus rien dire de ce qui devait se
-// passer : on coche ce qu'on voit.
-//
-// Le numero de ligne rendu reste celui de la CASE, donc l'ecriture des coches
-// (`ecrireCase`) n'est pas concernee : elle vise toujours la bonne ligne.
-const suiteDeCase = (lines, i) => {
-  const bouts = [];
-  for (let j = i + 1; j < lines.length; j++) {
-    const l = lines[j];
-    if (!l.trim() || !/^\s/.test(l) || RX.box.test(l)) break;
-    bouts.push(l.trim());
-  }
-  return bouts.length ? " " + bouts.join(" ") : "";
-};
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i > -1 ? args[i + 1] : d; };
@@ -259,7 +241,7 @@ async function pilotage() {
         const b = RX.box.exec(l);
         if (b) {
           if (!cur) { cur = { nom: "Général", items: [] }; zones.push(cur); }
-          cur.items.push({ texte: (b[2] + suiteDeCase(lines, i)).trim(), fait: b[1].toLowerCase() === "x", ligne: i + 1 });
+          cur.items.push({ texte: texteDeCase(lines, i), fait: b[1].toLowerCase() === "x", ligne: i + 1 });
         }
       });
       const tot = zones.reduce((n, z) => n + z.items.length, 0);
@@ -284,7 +266,7 @@ async function pilotage() {
         const h3 = RX.h3.exec(l); if (h3) { zone = h3[1].trim(); return; }
         const b = RX.box.exec(l);
         if (b && section === "reste")
-          reste.push({ texte: (b[2] + suiteDeCase(lines, i)).trim(),
+          reste.push({ texte: texteDeCase(lines, i),
                        fait: b[1].toLowerCase() === "x", ligne: i + 1, zone });
       });
       chantiers.push({

@@ -37,6 +37,39 @@ export const RX = {
   docpath: /\b(docs\/[A-Za-z0-9_.\-]+\.md)\b/g
 };
 
+// Une case peut tenir sur plusieurs lignes : les suivantes sont indentées, et ne sont
+// ni une autre case ni un titre. Le parseur, ligne à ligne, les jetait EN SILENCE —
+// ce qui coupait l'item à sa moitié « attendu ». Mesuré le 2026-08-21 sur le dossier :
+// 21 cases tronquées, dont 15 DÉJÀ COCHÉES. L'une d'elles, cochée, se lisait « Croiser
+// une portée vide — document X et langue fr — » sans plus rien dire de ce qui devait se
+// passer : on coche ce qu'on voit.
+//
+// Le numéro de ligne rendu reste celui de la CASE, donc l'écriture des coches
+// (`ecrireCase`) n'est pas concernée : elle vise toujours la bonne ligne.
+//
+// Monté ici depuis `journal.mjs` le 2026-08-26. C'est une RÈGLE DE LECTURE, et elle
+// n'était appliquée que par le serveur : le contrôleur lisait la ligne brute. Le
+// contrôle 4 est l'endroit où l'écart s'est vu — un code tombé sur la ligne repliée
+// était annoncé « sans item » avec le travail en cours écrit juste au-dessus. Le
+// gabarit DÉCRIVAIT déjà le recollage dans ses quatre règles strictes ; le contrat ne
+// le DÉFINISSAIT nulle part, et c'est le contrat qui fait foi.
+export const suiteDeCase = (lines, i) => {
+  const bouts = [];
+  for (let j = i + 1; j < lines.length; j++) {
+    const l = lines[j];
+    if (!l.trim() || !/^\s/.test(l) || RX.box.test(l)) break;
+    bouts.push(l.trim());
+  }
+  return bouts.length ? " " + bouts.join(" ") : "";
+};
+
+/** Le texte ENTIER d'une case : la ligne de la case, plus ses lignes repliées.
+ *  `RX.box` rend le contenu sans la puce ni la coche ; `suiteDeCase` rend la suite. */
+export const texteDeCase = (lines, i) => {
+  const b = RX.box.exec(lines[i]);
+  return b ? (b[2] + suiteDeCase(lines, i)).trim() : "";
+};
+
 export const frontmatter = (text) => {
   const m = RX.fm.exec(text); if (!m) return {};
   const o = {};

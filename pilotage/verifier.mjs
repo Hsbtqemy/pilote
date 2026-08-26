@@ -23,7 +23,7 @@
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
-import { RX, frontmatter, walk, estPasse, STATUTS, constatsAudit } from "../journal-contrat.mjs";
+import { RX, frontmatter, walk, estPasse, STATUTS, constatsAudit, texteDeCase } from "../journal-contrat.mjs";
 
 const args = process.argv.slice(2);
 const opt = (n, d) => { const i = args.indexOf(`--${n}`); return i > -1 ? args[i + 1] : d; };
@@ -53,7 +53,14 @@ for (const abs of await walk(join(ROOT, DIR))) {
     const m2 = RX.h2.exec(l); if (m2) { h2 = m2[1].trim(); h3 = null; return; }
     const m3 = RX.h3.exec(l); if (m3) { h3 = m3[1].trim(); return; }
     const b = RX.box.exec(l);
-    if (b) cases.push({ ligne: i + 1, h2, h3, indentee: /^\s+/.test(l), brut: l });
+    // `texte` est l'item ENTIER — ligne de la case PLUS ses lignes repliées, par la
+    // règle du contrat. Le contrôleur lisait jusqu'ici la ligne brute et croyait lire
+    // l'item : un code tombé sur une ligne repliée était annoncé « sans item » avec le
+    // travail en cours écrit juste au-dessus (contrôle 4). `fait` vient de la capture
+    // de `RX.box`, comme chez le serveur, et non d'un `[x]` cherché dans toute la
+    // ligne — un item qui CITE une case cochée n'est pas une case cochée.
+    if (b) cases.push({ ligne: i + 1, h2, h3, indentee: /^\s+/.test(l),
+                        texte: texteDeCase(lines, i), fait: b[1].toLowerCase() === "x" });
   });
 
   (estPasse(rel, fm) ? passes : chantiers).push({ rel, text, fm, cases, lines });
@@ -107,7 +114,7 @@ for (const p of passes) {
 const C3 = "audit: manquant";
 for (const c of chantiers) {
   const statut = c.fm.statut || "interrompu";
-  const ouverts = c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste" && !/\[[xX]\]/.test(b.brut)).length;
+  const ouverts = c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste" && !b.fait).length;
   if (statut !== "clos" && ouverts > 0 && !c.fm.audit)
     warn(C3, c.rel, `${ouverts} item(s) ouvert(s) sans \`audit:\` — la source des constats n'est pas atteignable depuis l'écran`);
 }
@@ -123,8 +130,14 @@ for (const c of chantiers) {
   const abs = join(ROOT, c.fm.audit);
   if (!existsSync(abs)) continue;                     // déjà signalé en contrôle 1
   const texte = await readFile(abs, "utf8");
-  const reste = c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste")
-                       .map(b => b.brut).join("\n");
+  // Les items OUVERTS du Reste, en entier. Deux restrictions, chacune corrigeant un
+  // sens de l'erreur, et toutes deux sorties de la même ligne :
+  //   · `!b.fait` — un `- [x]` de juin citait encore ses codes, donc les faisait passer
+  //     pour pris en charge ; mesuré, quatre 🔴 disparaissaient ainsi de la sortie.
+  //   · `b.texte` — l'item entier, et non sa première ligne : un code tombé sur une
+  //     ligne repliée remontait « sans item » alors qu'il était réellement couvert.
+  const reste = c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste" && !b.fait)
+                       .map(b => b.texte).join("\n");
 
   // La lecture du tableau vient de `journal-contrat.mjs` : le serveur remonte les
   // mêmes codes vers le chantier, et deux copies de cette règle donneraient des
@@ -157,7 +170,7 @@ for (const c of chantiers) {
 
 // ── le contrôle qui manque ───────────────────────────────────────────────────
 const itemsOuverts = chantiers.reduce(
-  (n, c) => n + c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste" && !/\[[xX]\]/.test(b.brut)).length, 0);
+  (n, c) => n + c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste" && !b.fait).length, 0);
 
 // ── sortie ───────────────────────────────────────────────────────────────────
 if (JSON_) {
