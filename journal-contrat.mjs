@@ -110,8 +110,27 @@ export const estPasse = (rel, fm) => fm.passe !== undefined || rel.includes("/qa
  *
  *  Il n'a pas de démenti mécanique, et c'est délibéré : `commitsCode` compte sur toute
  *  la fenêtre, sans savoir ce qui précède la mise en attente. Le démenti se déclencherait
- *  sur l'historique légitime d'avant. Il en faudrait une date, que la fiche ne porte pas. */
-export const STATUTS = ["à venir", "interrompu", "clos", "différé", "livré"];
+ *  sur l'historique légitime d'avant. Il en faudrait une date, que la fiche ne porte pas.
+ *
+ *  `livré` : intégré. C'est le seul statut qui parle d'INTÉGRATION, et l'outil la mesure
+ *  déjà — `ch.front` dit sur quelle ref vit le dernier commit du chantier, et si cette ref
+ *  est une ref d'intégration. Il a longtemps été purement déclaratif : reproduit le
+ *  2026-08-26 sur un dépôt jetable, une fiche `livré` dont le dernier commit vivait sur
+ *  `feat/r9`, absente de la ref d'intégration, était rangée « Clos et livrés » sans que
+ *  rien ne signale l'écart. Il a désormais son démenti, comme `à venir` : déclarer
+ *  l'intention, laisser le journal la contredire. Sans front mesurable — un chantier
+ *  livré sans aucun commit — on ne dit rien, comme pour un `Arrêté sur` sans dernier.
+ *
+ *  `abandonné` : décidé de ne pas le faire. Fermé, mais PAS fait — et c'est exactement
+ *  ce qui manquait : sans le mot, on supprime le fichier et le raisonnement part avec.
+ *  Une fiche abandonnée garde son `Reste` ouvert exprès ; c'est la trace de ce qu'on a
+ *  renoncé à faire, pas un reliquat.
+ *
+ *  Il n'a pas de démenti mécanique, pour la raison exacte de `différé` : il faudrait la
+ *  date de l'abandon, et la fiche ne la porte pas. Un commit citant le code APRÈS coup
+ *  serait un vrai démenti ; `commitsCode` compte sur toute la fenêtre et se déclencherait
+ *  sur le travail légitime d'avant la décision. */
+export const STATUTS = ["à venir", "interrompu", "clos", "différé", "livré", "abandonné"];
 
 // Un constat est OUVERT si sa colonne sévérité porte une de ces pastilles ; ✅ ou
 // barré valent clos. `reconnu` distingue « aucun constat ouvert » de « je ne sais pas

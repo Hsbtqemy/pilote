@@ -112,10 +112,15 @@ for (const p of passes) {
 
 // ── contrôle 3 — `audit:` manquant sur un chantier ouvert ────────────────────
 const C3 = "audit: manquant";
+// `clos` et `abandonné` sont fermés pour de bon : leurs items ouverts ne sont pas un
+// reliquat. Un abandonné en garde exprès — c'est la trace de ce qu'on a renoncé à faire,
+// et l'avertir chaque fois reviendrait à réclamer la suppression du fichier, donc du
+// raisonnement, ce que le statut existe précisément pour éviter.
+const FERMES = ["clos", "abandonné"];
 for (const c of chantiers) {
   const statut = c.fm.statut || "interrompu";
   const ouverts = c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste" && !b.fait).length;
-  if (statut !== "clos" && ouverts > 0 && !c.fm.audit)
+  if (!FERMES.includes(statut) && ouverts > 0 && !c.fm.audit)
     warn(C3, c.rel, `${ouverts} item(s) ouvert(s) sans \`audit:\` — la source des constats n'est pas atteignable depuis l'écran`);
 }
 
@@ -187,8 +192,14 @@ for (const c of chantiers) {
 }
 
 // ── le contrôle qui manque ───────────────────────────────────────────────────
-const itemsOuverts = chantiers.reduce(
-  (n, c) => n + c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste" && !b.fait).length, 0);
+// Les items d'un chantier FERMÉ n'y entrent pas. Un `abandonné` garde son Reste ouvert
+// exprès : ce sont les pistes auxquelles on a renoncé, pas du travail à confronter au
+// code. Mesuré à l'introduction du statut, sur un dépôt jetable de deux fiches : les
+// deux seuls items comptés venaient du chantier abandonné — 100 % d'un chiffre qui
+// existe pour nommer ce qu'il reste à lire.
+const itemsOuverts = chantiers
+  .filter(c => !FERMES.includes(c.fm.statut || "interrompu"))
+  .reduce((n, c) => n + c.cases.filter(b => (b.h2 || "").toLowerCase() === "reste" && !b.fait).length, 0);
 // Le complément du contrôle 4, et il n'est pas une bonne nouvelle : un constat CITÉ
 // par un item n'est pas un constat pris en charge. Ce compte grandit avec le problème
 // — un item qui recense dix codes en cite dix — là où un seuil aurait été arbitraire.
@@ -229,16 +240,21 @@ if (JSON_) {
 
   // Le manque, en dernier et en toutes lettres. Deux entrées et non plus une : le
   // contrôle 4 rend « non cités », jamais « non couverts », et l'écart entre les deux
-  // est exactement ce qui reste à lire.
-  console.log("\nNON COUVERT — à faire à la main.");
-  console.log(`   · les ${itemsOuverts} item${pl(itemsOuverts)} du Reste, face au code. Aucun contrôle mécanique`);
-  console.log("     ne peut dire si « X est absent » est encore vrai : il faut ouvrir le");
-  console.log("     fichier que la phrase désigne.");
-  if (constatsCites) {
-    console.log(`   · les ${constatsCites} constat${pl(constatsCites)} CITÉ${pl(constatsCites)} par un item ouvert. Citer n'est pas`);
-    console.log("     prendre en charge : un item qui recense dix codes pour dire qu'aucun");
-    console.log("     n'a de plan les cite tous, et « non cités » rend alors 0 — ce qui est");
-    console.log("     vrai, et ne dit rien de la couverture.");
+  // est exactement ce qui reste à lire. Rien à confronter ⇒ pas de bloc : un « 0 item »
+  // affiché sous un titre NON COUVERT se lit comme un manque alors qu'il n'y en a pas.
+  if (itemsOuverts || constatsCites) {
+    console.log("\nNON COUVERT — à faire à la main.");
+    if (itemsOuverts) {
+      console.log(`   · les ${itemsOuverts} item${pl(itemsOuverts)} du Reste des chantiers OUVERTS, face au`);
+      console.log("     code. Aucun contrôle mécanique ne peut dire si « X est absent » est encore");
+      console.log("     vrai : il faut ouvrir le fichier que la phrase désigne.");
+    }
+    if (constatsCites) {
+      console.log(`   · les ${constatsCites} constat${pl(constatsCites)} CITÉ${pl(constatsCites)} par un item ouvert. Citer n'est pas`);
+      console.log("     prendre en charge : un item qui recense dix codes pour dire qu'aucun");
+      console.log("     n'a de plan les cite tous, et « non cités » rend alors 0 — ce qui est");
+      console.log("     vrai, et ne dit rien de la couverture.");
+    }
   }
 }
 

@@ -19,10 +19,13 @@ IMPORTANT — respecter exactement `## Reste` et les H3 de zone : l'outil ne lit
 ces sections.
 
 - Fin de session : mettre à jour le `Reste` du chantier travaillé.
-- `statut:` se prend dans `à venir` · `interrompu` · `différé` · `clos` · `livré`,
+- `statut:` se prend dans `à venir` · `interrompu` · `différé` · `clos` · `livré` ·
+  `abandonné`,
   et rien d'autre — le contrôleur refuse le reste. `différé` = mis en attente exprès
   (autre chose doit aboutir d'abord), à distinguer d'`interrompu` = arrêté en plein
-  travail.
+  travail. `abandonné` = décidé de ne pas le faire : fermé mais pas fait, et la fiche
+  garde son `Reste` ouvert exprès plutôt que d'être supprimée avec son raisonnement.
+  `livré` est démenti par l'écran si le dernier commit n'est sur aucune ref d'intégration.
 - Le commit de code d'abord, le commit de fiche ensuite, **séparément** : une fiche
   ne peut pas citer le commit qui la met à jour, et les commits qui ne touchent que
   `pilotage/` sont exclus du datage.

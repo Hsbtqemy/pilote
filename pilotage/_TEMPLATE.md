@@ -51,12 +51,23 @@ Collision connue : R5 partage 25 fichiers, dont sidecar.py.
 | Élément | Règle | Si absent |
 |---|---|---|
 | `chantier:` | Le code, **tel qu'il apparaît dans les sujets de commit** | Le nom de fichier sert de code |
-| `statut:` | `à venir` · `interrompu` · `différé` · `clos` · `livré` | Traité comme `interrompu` |
+| `statut:` | `à venir` · `interrompu` · `différé` · `clos` · `livré` · `abandonné` | Traité comme `interrompu` |
 | `audit:` | Chemin du document qui porte le tableau des constats | Pas de remontée, pas de lien |
 | `# Titre` | Premier H1 | Le code sert de titre |
 | `**Arrêté sur**` | La ligne entière après le tiret ; l'outil la signale **décalée** dès qu'elle ne cite plus le dernier commit de code. `**Point de départ**` est accepté à sa place, et c'est le mot juste sur un `à venir` — qui n'est jamais signalé décalé, n'ayant aucun commit à citer | Ligne omise |
 | `## Reste` | Les cases ; les `###` y regroupent par zone, comme dans une passe | Section absente de l'écran |
 | `## Contexte` | Prose, affichée telle quelle | Rien |
+
+**`statut: abandonné`** est pour ce qu'on a décidé de NE PAS faire. Fermé, mais pas
+fait — et c'est la différence avec `clos`. Sans le mot, on supprime le fichier et le
+raisonnement part avec lui ; la fiche abandonnée garde son `Reste` ouvert **exprès**,
+comme trace de ce à quoi on a renoncé. Le contrôleur ne réclame donc pas d'`audit:`
+dessus, et l'écran le range avec les fermés sans jamais le dire « livré ».
+
+**`statut: livré`** est le seul qui parle d'**intégration**, et l'outil la mesure : si le
+dernier commit du chantier ne vit sur aucune ref d'intégration, la fiche est **démentie**
+et l'écran l'annonce « hors de <refs> ». Déclarer reste utile — le journal se charge de
+contredire.
 
 **`statut: à venir`** est pour la fiche écrite *avant* le premier commit de code : le
 chantier est cadré, il n'a pas commencé. Sans lui, un chantier neuf s'annonce

@@ -74,6 +74,11 @@ a{color:var(--outremer)}
 .s-clos .plaque,.s-liv .plaque{background:var(--pl-close-bg);color:var(--pl-close-fg)}
 .s-clos .mot,.s-clos .mesure i,.s-liv .mesure i{color:var(--pl-close-fg2);opacity:1}
 .s-liv .mot{color:var(--verdet);opacity:1}
+/* « abandonné » : fermé pour de bon, donc la plaque éteinte des clos — mais surtout PAS
+   le verdet de `livré`, qui dit « fait ». Le mot reste en gris de clôture : on a décidé
+   de ne pas le faire, ce n'est ni une livraison ni un reliquat. */
+.s-aba .plaque{background:var(--pl-close-bg);color:var(--pl-close-fg)}
+.s-aba .mot,.s-aba .mesure i{color:var(--pl-close-fg2);opacity:1}
 
 /* ---------- carte ---------- */
 .pile{display:flex;flex-direction:column;gap:.375rem}
@@ -102,6 +107,10 @@ a{color:var(--outremer)}
 .repli a:hover{color:#fff}
 .repli a .v{color:var(--verdet)}
 .repli a .nf{color:var(--pl-close-fg2)}
+/* `abandonné` ne peut prendre ni le verdet de `.v` — il n'est pas fait — ni le gris de
+   `.nf`, qui est celui d'un démenti. Ce n'en est pas un : c'est une décision. D'où une
+   troisième forme, en capitales d'étiquette, qui ne se confond avec aucune des deux. */
+.repli a .ab{font-size:var(--t1);text-transform:uppercase;letter-spacing:.09em;opacity:.7}
 
 /* ---------- folio ---------- */
 .retour{font:500 var(--t2)/1 var(--mo);text-decoration:none;color:var(--encre2);
@@ -120,7 +129,7 @@ a{color:var(--outremer)}
 .titre-f{font:600 var(--t5)/1.15 var(--sr);letter-spacing:-.022em;margin:0 0 .9rem}
 .lemme-f{font:400 1.125rem/1.55 var(--sr);margin:0;padding:.9rem 1.1rem;
   background:var(--plat);border-left:3px solid var(--minium);border-radius:0 2px 2px 0}
-.s-clos .lemme-f,.s-liv .lemme-f{border-left-color:var(--pl-close-bg)}
+.s-clos .lemme-f,.s-liv .lemme-f,.s-aba .lemme-f{border-left-color:var(--pl-close-bg)}
 .s-dif .lemme-f{border-left-style:double;border-left-width:5px}
 .s-ven .lemme-f{border-left-color:var(--outremer)}
 .lemme-f b{font:600 var(--t1)/1 var(--mo);text-transform:uppercase;letter-spacing:.11em;
@@ -260,7 +269,7 @@ a{color:var(--outremer)}
 .mini::after{content:"";position:absolute;left:0;right:0;top:0;height:9px;
   border-left:1px solid currentColor;border-right:1px solid currentColor;opacity:.22}
 .mini>span{position:absolute;top:3px;height:3px;border-radius:2px;background:var(--minium)}
-.s-clos .mini>span,.s-liv .mini>span{background:var(--pl-close-bg)}
+.s-clos .mini>span,.s-liv .mini>span,.s-aba .mini>span{background:var(--pl-close-bg)}
 .s-ven .mini>span{background:var(--outremer)}
 .s-dif .mini>span{background:var(--minium);opacity:.6}
 
@@ -283,7 +292,7 @@ a{color:var(--outremer)}
 .fr-t{position:relative;height:1.55rem}
 .fr-b{position:absolute;top:.42rem;height:.7rem;min-width:3px;border-radius:2px;
   background:var(--minium)}
-.s-clos .fr-b,.s-liv .fr-b{background:var(--pl-close-bg)}
+.s-clos .fr-b,.s-liv .fr-b,.s-aba .fr-b{background:var(--pl-close-bg)}
 .s-ven .fr-b{background:var(--outremer)}
 /* La fiche et l'audit sont des instants, pas des durées : un trait fin, pas une barre.
    Le losange de la fiche se distingue du trait de l'audit sans recourir à la couleur. */
@@ -461,12 +470,26 @@ const prose = md => pastilles(esc(md).split(/\n{2,}/)
   .map(p => "<p>" + inline(p.replace(/\n/g, " ")) + "</p>").join(""));
 
 const OUVERT = s => s === "à venir" || s === "interrompu" || s === "différé";
-const SLUG = { "à venir":"ven", "interrompu":"int", "différé":"dif", "clos":"clos", "livré":"liv" };
+const SLUG = { "à venir":"ven", "interrompu":"int", "différé":"dif", "clos":"clos", "livré":"liv", "abandonné":"aba" };
 const slug = s => SLUG[s] || "int";
-/* Un `à venir` que git dément : la fiche annonce que rien n'a commencé, et des commits
-   qui citent son code touchent autre chose que la doc et `pilotage/`. Déclaré d'un
-   côté, mesuré de l'autre — on montre l'écart plutôt que d'arbitrer. */
-const dementi = c => c.statut === "à venir" && c.commitsCode > 0;
+/* Un statut déclaré que git dément. Deux cas, un seul principe : la fiche affirme
+   quelque chose de mesurable, et la mesure dit le contraire. On montre l'écart plutôt
+   que d'arbitrer.
+   · `à venir` — la fiche annonce que rien n'a commencé, et des commits qui citent son
+     code touchent autre chose que la doc et `pilotage/`.
+   · `livré` — c'est de l'INTÉGRATION, et le front la mesure déjà. Une fiche livrée dont
+     le dernier commit ne vit sur aucune ref d'intégration annonce une livraison que le
+     dépôt ne montre pas. Reproduit le 2026-08-26 : `livré` déclaré, dernier commit sur
+     `feat/r9`, et l'écran rangeait la fiche « Clos et livrés » sans un mot.
+   Sans front mesuré — un `livré` sans aucun commit — on se tait, comme pour un
+   `Arrêté sur` sans dernier : ne rien savoir n'est pas un démenti.
+   `différé` et `abandonné` n'en ont pas, et c'est délibéré : il leur faudrait la date de
+   la mise en attente ou de l'abandon, que la fiche ne porte pas (voir STATUTS). */
+const dementi = c => (c.statut === "à venir" && c.commitsCode > 0)
+                  || (c.statut === "livré" && c.front && !c.front.integre);
+const ditDementi = c => c.statut === "livré"
+  ? `hors de ${(D.refs || []).join(", ")}`
+  : `${c.commitsCode} commit${c.commitsCode > 1 ? "s" : ""} de code`;
 /* La portée d'un audit : combien le code a bougé sous lui depuis qu'il est écrit.
    Elle ne dit JAMAIS qu'un constat est réglé — aucune mesure ne peut le dire. Elle dit
    que le sol a bougé, donc qu'il faut relire avant de planifier. D'où « à relire » et
@@ -508,7 +531,7 @@ const aRelire = () => {
    chantier qui a bougé ce matin, c'est un risque présent. On montre l'état plutôt que
    d'en fabriquer une pondération : le lecteur sait ce que « livré » veut dire chez lui. */
 const ditCollisions = (l) => l.slice(0, 3).map(x => {
-  const ferme = x.statut === "clos" || x.statut === "livré";
+  const ferme = x.statut === "clos" || x.statut === "livré" || x.statut === "abandonné";
   const etat = ferme ? esc(x.statut)
     : x.silence === null ? "jamais commencé"
     : `${x.silence} j de silence`;
@@ -733,7 +756,7 @@ function vueChantiers(){
           ${c.arrete ? `<p class="lemme">${ligne(c.arrete)}</p>` : ""}
           <p class="pied">
             <span class="${r ? "r" : "r0"}">${r ? r + " reste" + (r > 1 ? "s" : "") : "aucun reliquat"}</span>
-            ${dementi(c) ? `<span class="nf">${c.commitsCode} commit${c.commitsCode > 1 ? "s" : ""} de code</span>` : ""}
+            ${dementi(c) ? `<span class="nf">${esc(ditDementi(c))}</span>` : ""}
             ${c.dernier ? `<span>${c.dernier.hash} · ${c.dernier.date}</span>` : ""}
             ${c.front ? `<span class="fr${c.front.integre ? "" : " nf"}">${esc(c.front.ref)}</span>` : ""}
           </p>
@@ -750,14 +773,22 @@ function vueChantiers(){
        + bloc(int, "Interrompus — arrêtés en plein travail")
        + bloc(dif, "Différés — fermés volontairement, reliquat connu")
        + (ven.length || int.length || dif.length ? "" : vide(
-           `<p>Aucun chantier ouvert — les ${D.chantiers.length} fiches sont closes ou livrées.</p>
+           `<p>Aucun chantier ouvert — les ${D.chantiers.length} fiches sont closes, livrées ou abandonnées.</p>
             <p>Quand tu en reprends un, repasse son <code>statut:</code> à
             <code>interrompu</code> dans sa fiche et il remontera ici.</p>`))
-       + (fer.length ? `<h2 class="sec"><span>Clos et livrés</span><span class="n">${fer.length}</span></h2>
+       /* Le bac des fermés porte trois mots, et ils ne disent pas la même chose : `clos`
+          est fait, `livré` est intégré, `abandonné` est décidé non fait. Seuls les deux
+          derniers portent un badge — `clos` est le cas ordinaire, il n'a rien à ajouter.
+          Un `livré` que le front dément le dit ICI aussi : la carte complète ne s'affiche
+          que pour les chantiers ouverts, et une livraison démentie qui ne serait visible
+          que sur les cartes ne serait visible nulle part. */
+       + (fer.length ? `<h2 class="sec"><span>Clos, livrés et abandonnés</span><span class="n">${fer.length}</span></h2>
            <div class="repli">${fer.map(c =>
              `<a href="#/c/${encodeURIComponent(c.code)}">${esc(c.code)}${
                c.statut === "livré" ? ` <span class="v">livré</span>` : ""}${
-               c.front && !c.front.integre ? ` <span class="nf">${esc(c.front.ref)}</span>` : ""}</a>`).join("")}</div>` : "");
+               c.statut === "abandonné" ? ` <span class="ab">abandonné</span>` : ""}${
+               dementi(c) ? ` <span class="nf">${esc(ditDementi(c))}</span>`
+                 : c.front && !c.front.integre ? ` <span class="nf">${esc(c.front.ref)}</span>` : ""}</a>`).join("")}</div>` : "");
 }
 
 /* Les items du Reste, groupés par zone `###` s'il y en a. Aucune zone déclarée →
