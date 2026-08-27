@@ -12,7 +12,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, relative, basename, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 // Contrat de parsing partage avec pilotage/verifier.mjs -- voir journal-contrat.mjs.
-import { RX, frontmatter, walk, estPasse, constatsAudit, texteDeCase } from "./journal-contrat.mjs";
+import { RX, frontmatter, walk, estPasse, constatsAudit, texteDeCase, lemmeArret } from "./journal-contrat.mjs";
 
 
 const args = process.argv.slice(2);
@@ -269,11 +269,15 @@ async function pilotage() {
           reste.push({ texte: texteDeCase(lines, i),
                        fait: b[1].toLowerCase() === "x", ligne: i + 1, zone });
       });
+      // Le lemme rend son libellé avec son texte : la vue affiche le mot que la FICHE a
+      // écrit, elle ne le redéduit pas du statut (voir `RX.arret`).
+      const lemme = lemmeArret(text);
       chantiers.push({
         file: rel, code: fm.chantier || basename(rel, ".md"), titre,
         statut: fm.statut || "interrompu",
         audit: fm.audit || null,
-        arrete: (RX.arret.exec(text) || [, null])[1],
+        arrete: lemme ? lemme.texte : null,
+        arreteLibelle: lemme ? lemme.libelle : null,
         reste, contexte: bloc(text, "Contexte")
       });
     }

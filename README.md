@@ -125,6 +125,11 @@ promesses — c'est ce qui est effectivement sorti quand on a regardé.
 
 - **21 cases tronquées, dont 15 déjà cochées.** Le parseur jetait en silence les lignes
   de continuation ; l'une d'elles, cochée, ne disait plus ce qui devait se passer.
+- **32 points de départ tronqués sur 33**, le jumeau du défaut ci-dessus à l'endroit où
+  aucun contrôle ne regarde. 3 004 caractères n'atteignaient jamais l'écran, et la moitié
+  perdue portait souvent la conclusion — « n'a jamais été commencée », « à traiter AVANT
+  toute exposition réseau ». La première ligne se lit très bien : on ne voit pas ce qui
+  manque.
 - **4 points de reprise périmés sur 14**, et c'étaient les trois fiches les plus actives.
   Le `Arrêté sur` ne tient que là où on n'en a pas besoin — d'où la traînée de commits.
 - **12 constats d'audit ouverts, dont 5 sérieux, qu'aucun `Reste` ne citait.** Ils

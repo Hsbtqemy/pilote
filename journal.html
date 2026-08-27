@@ -555,6 +555,16 @@ const bandePerime = () => !serveurPerime() ? "" :
    collisions manquent, et l'écran les montre comme si elles étaient vides. Arrête le
    processus et relance-le.</p>`;
 
+/* Le libellé vient du serveur (`arreteLibelle`) : la fiche dit « Point de départ » ou
+   « Arrêté sur », et l'écran ne le redéduit pas — un `différé` n'a rien commencé mais
+   n'est pas « à venir », et se voyait titrer « Arrêté sur ».
+
+   Le repli n'est là que pour le moteur périmé : la sentinelle de `serveurPerime()` porte
+   sur `ficheDate`, plus ancienne, donc un moteur intermédiaire sert le champ absent SANS
+   déclencher le bandeau. Mieux vaut l'ancienne déduction — parfois fausse — qu'un
+   `undefined` en capitales. */
+const libelleDeduit = c => c.statut === "à venir" ? "Point de départ" : "Arrêté sur";
+
 const byCode = c => D.chantiers.find(x => x.code === c);
 const byFile = f => D.passes.find(p => p.file === f);
 const jour = s => new Date(s + "T00:00:00")
@@ -845,7 +855,7 @@ function vueFiche(code){
     </aside>
     <div>
       <h1 class="titre-f">${esc(c.titre)}</h1>
-      ${c.arrete ? `<p class="lemme-f"><b>${c.statut === "à venir" ? "Point de départ" : "Arrêté sur"}</b>${ligne(c.arrete)}</p>` : ""}
+      ${c.arrete ? `<p class="lemme-f"><b>${esc(c.arreteLibelle || libelleDeduit(c))}</b>${ligne(c.arrete)}</p>` : ""}
       ${!c.trainee?.length ? "" : `<ol class="trainee">${c.trainee.map(t => `<li>
         <span class="t-h">${t.hash}</span><span class="t-d">${t.date}</span>
         <span class="t-s">${ligne(t.sujet)}</span></li>`).join("")}</ol>`}

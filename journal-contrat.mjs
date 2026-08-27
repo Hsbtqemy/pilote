@@ -27,7 +27,13 @@ export const RX = {
   // « Point de départ » est le même artefact sous le mot juste pour un `à venir` :
   // on ne s'est arrêté sur rien. Un seul champ, deux libellés — l'écran affiche celui
   // que la fiche a écrit, et le contrat n'en gagne pas un second.
-  arret:   /^\*\*(?:Arrêté sur|Point de départ)\*\*\s*[—–-]?\s*(.+)$/m,
+  //
+  // Le libellé est donc CAPTURÉ (groupe 1), le texte suit (groupe 2). La vue le dérivait
+  // du statut, ce qui faisait mentir toute fiche `différé` : elle écrit « Point de départ »
+  // parce qu'elle n'a rien commencé, et s'affichait « Arrêté sur ». La phrase ci-dessus
+  // décrivait depuis le début une règle que rien n'appliquait — mesuré le 2026-08-27 sur
+  // un dépôt hôte, six fiches sur vingt-sept.
+  arret:   /^\*\*(Arrêté sur|Point de départ)\*\*\s*[—–-]?\s*(.+)$/m,
   box:     /^\s*[-*]\s+\[([ xX])\]\s+(.+)$/,
   h2:      /^##\s+(.+)$/,
   h3:      /^###\s+(.+)$/,
@@ -68,6 +74,56 @@ export const suiteDeCase = (lines, i) => {
 export const texteDeCase = (lines, i) => {
   const b = RX.box.exec(lines[i]);
   return b ? (b[2] + suiteDeCase(lines, i)).trim() : "";
+};
+
+// Ce qui interrompt un paragraphe markdown. « Jusqu'à la ligne vide » ne suffisait pas :
+// une liste, une citation, un tableau, une règle ou un bloc de code se retrouvaient
+// aplatis DANS la phrase — « x : - un - deux ». Aucune fiche des deux dossiers n'écrit
+// ça aujourd'hui, mais le docblock ci-dessous promet un paragraphe, et c'est la promesse
+// qui fait foi. Le titre est ATX strict (`#` suivi d'une espace, comme
+// `RX.h1`/`h2`/`h3`) pour qu'un « #3 » en prose ne coupe pas la phrase ; l'item de liste
+// couvre la case, qui n'est qu'un item parmi d'autres.
+const FIN_PARAGRAPHE =
+  /^\s*(?:#{1,6}\s|[-*+]\s|\d+[.)]\s|>|\||-{3,}\s*$|\*{3,}\s*$|_{3,}\s*$|`{3}|~{3})/;
+
+/** Le lemme d'une fiche — son `Arrêté sur` / `Point de départ` — rendu ENTIER :
+ *  `{ libelle, texte }`, ou `null` si la fiche n'en porte pas.
+ *
+ *  Il tient sur un PARAGRAPHE, pas sur une ligne. La regex est mono-ligne par nature
+ *  (`.` ne franchit pas le saut) : elle rendait la première ligne et jetait le reste EN
+ *  SILENCE. C'est le jumeau exact du bug des cases (`suiteDeCase`, corrigé le
+ *  2026-08-21), à l'endroit où personne ne l'avait vu — aucun contrôle ne regarde le
+ *  lemme, et la première ligne se lit très bien : on ne voit pas ce qui manque.
+ *
+ *  Mesuré le 2026-08-27. Sur les six fiches de CE dépôt, CINQ étaient coupées ; sur les
+ *  vingt-sept d'un dépôt hôte, VINGT-SEPT. La moitié perdue porte souvent la conclusion :
+ *  « n'a jamais été commencée », « à traiter AVANT toute exposition réseau », « l'option
+ *  (c), seule à garantir le zéro-OOM, est restée dehors ». Ce qui restait à l'écran
+ *  n'était que le décor de la phrase.
+ *
+ *  La suite n'est PAS indentée, contrairement à celle d'une case : c'est un paragraphe
+ *  markdown ordinaire, qui s'arrête où un paragraphe s'arrête — `FIN_PARAGRAPHE`.
+ *  `suiteDeCase` ne pouvait donc pas servir telle quelle.
+ *
+ *  `RX.arret` garde son `/m` : appliqué ligne à ligne, le drapeau ne sert à rien, mais
+ *  il laisse la regex juste sur un texte entier — la forme la plus lisible du champ.
+ *
+ *  Le décalage y gagne au passage : `c_arreteDecale` cherche un hash dans ce texte, et
+ *  une fiche qui citait son commit en deuxième ligne s'annonçait décalée à tort. */
+export const lemmeArret = (text) => {
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const m = RX.arret.exec(lines[i]);
+    if (!m) continue;
+    const bouts = [m[2].trim()];
+    for (let j = i + 1; j < lines.length; j++) {
+      const l = lines[j];
+      if (!l.trim() || FIN_PARAGRAPHE.test(l)) break;
+      bouts.push(l.trim());
+    }
+    return { libelle: m[1], texte: bouts.join(" ").trim() };
+  }
+  return null;
 };
 
 export const frontmatter = (text) => {
