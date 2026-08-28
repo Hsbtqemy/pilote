@@ -406,6 +406,24 @@ function fronts() {
 // `{ancien => nouveau}`). Sans aires déclarées, l'onglet reste vide — mais la passe
 // tourne quand même : c'est elle qui repère les commits de tenue.
 const AIRES = CFG.aires;
+// Les NOMS distincts, pas les entrées : plusieurs préfixes peuvent porter le même nom
+// d'aire — l'inventaire l'annonce et les dépôts s'en servent — et ils doivent
+// s'ADDITIONNER en une série, pas se dupliquer en autant de copies.
+//
+// `cum`/`serie` sont déjà indexés par nom, donc le cumul était juste ; c'est le
+// PARCOURS qui ne l'était pas. `graver()` itérait les entrées : une aire déclarée six
+// fois recevait six points par mois, et la ligne finale sortait six fois. Mesuré le
+// 2026-08-27 sur un dépôt hôte — `noyau` en six préfixes, `docs` en deux :
+//
+//   noyau  série de 18 points pour 3 mois, delta annoncé 0      (vrai : +857)
+//   docs   série de  6 points pour 3 mois, delta annoncé -152   (vrai : +1474)
+//
+// Le delta se prend `fenetre` points en arrière : sur une série gonflée, il remontait
+// 3 POINTS et non 3 mois — une demi-fenêtre pour `noyau`. `docs` en sortait avec le
+// mauvais SIGNE, annoncé en recul alors qu'il grossit, et le tri par |delta| — qui est
+// tout l'intérêt de l'écran — classait les deux aires à la cave. La courbe, elle, était
+// tracée contre un axe de 3 mois avec 18 valeurs.
+const NOMS = [...new Set(AIRES.map(([n]) => n))];
 // Le dossier de documentation du dépôt, quand il est déclaré : sert à distinguer un
 // commit de cadrage (note + fiche) d'un commit de code. Sans config, aucun démenti.
 const DOCS = CFG.documentation.dossier;
@@ -423,7 +441,7 @@ function calculMasses(seuil, fenetre) {
   if (!raw) return null;
 
   const cum = {}, serie = {}, mois = [], jalons = [], tenue = [], redaction = [];
-  for (const [n] of AIRES) { cum[n] = 0; serie[n] = []; }
+  for (const n of NOMS) { cum[n] = 0; serie[n] = []; }
   let m = null, c = null, net = 0, nf = 0, npil = 0, ndoc = 0;
   const clore = () => {
     if (!c) return;
@@ -435,7 +453,7 @@ function calculMasses(seuil, fenetre) {
     // de conception est un vrai travail sur le chantier.
     if (nf > 0 && nf === npil + ndoc) redaction.push(c.hash);
   };
-  const graver = () => { mois.push(m); for (const [n] of AIRES) serie[n].push(cum[n]); };
+  const graver = () => { mois.push(m); for (const n of NOMS) serie[n].push(cum[n]); };
 
   for (const l of raw.split("\n")) {
     if (l.startsWith("@")) {
@@ -457,7 +475,7 @@ function calculMasses(seuil, fenetre) {
   clore();
   if (m) graver();
 
-  const aires = AIRES.map(([nom]) => {
+  const aires = NOMS.map(nom => {
     const v = serie[nom], tot = v[v.length - 1] || 0;
     return { nom, valeurs: v, total: tot, delta: tot - (v[Math.max(0, v.length - 1 - fenetre)] ?? 0) };
   }).filter(a => a.total > 0).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
