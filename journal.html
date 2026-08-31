@@ -183,6 +183,18 @@ a{color:var(--outremer)}
   vertical-align:baseline;font-variant-numeric:tabular-nums}
 .prose tbody tr:last-child td{border-bottom:0}
 .prose th:last-child,.prose td:last-child{padding-right:0}
+/* Un bloc de code se lit et se COPIE : d'où le défilement horizontal plutôt que le
+   repli, qui casserait le collage, et `white-space:pre` qui garde l'indentation.
+   `max-width` levée pour la même raison que les tables — la mesure de lecture confortable
+   ne s'applique pas à du code. La langue déclarée après ``` s'affiche en filigrane. */
+.prose pre.bloc{position:relative;margin:0 0 1.1rem;padding:.85rem 1rem;
+  background:var(--plat2);border:1px solid var(--verge);border-radius:3px;
+  max-width:none;overflow-x:auto}
+.prose pre.bloc code{display:block;white-space:pre;background:none;padding:0;
+  font:400 var(--t2)/1.55 var(--mo);color:var(--encre)}
+.prose pre.bloc[data-l]::before{content:attr(data-l);position:absolute;top:.35rem;
+  right:.6rem;font:500 var(--t1)/1 var(--mo);text-transform:uppercase;
+  letter-spacing:.1em;color:var(--encre3);pointer-events:none}
 .zone{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;
   font:500 var(--t1)/1 var(--mo);text-transform:uppercase;letter-spacing:.13em;
   color:var(--encre3);margin:2rem 0 .6rem}
@@ -498,10 +510,44 @@ const table = lignes => {
     + `<tbody>${corps.map(l => `<tr>${cellules(l).map(c => `<td>${c}</td>`).join("")}</tr>`)
         .join("")}</tbody></table>`;
 };
-const prose = md => pastilles(esc(md).split(/\n{2,}/).map(p => {
+const paragraphes = md => pastilles(esc(md).split(/\n{2,}/).filter(p => p.trim()).map(p => {
   const lignes = p.split("\n").filter(l => l.trim());
   return estTable(lignes) ? table(lignes) : "<p>" + inline(p.replace(/\n/g, " ")) + "</p>";
 }).join(""));
+
+/* Le second endroit où les retours à la ligne portent du sens, et le plus littéral : un
+   bloc clôturé par ```. Il sortait en paragraphes, lignes repliées et clôtures visibles
+   en toutes lettres. Le cas qui l'a montré est une sonde de console — soixante-dix lignes
+   de JavaScript écrites pour être COLLÉES : rendues ainsi, elles étaient incollables, ce
+   qui vide la passe de son sens.
+
+   Deux différences avec le reste de la prose, et ce sont les deux raisons d'un chemin
+   séparé plutôt que d'un cas de plus dans le découpage par lignes vides : un bloc de code
+   CONTIENT des lignes vides, donc il faut l'extraire avant de découper ; et `pastilles`
+   ne doit pas y courir — sinon un `R6` dans du code deviendrait un lien vers une fiche.
+   Aucun bloc du dépôt mesuré n'est dans ce cas aujourd'hui (seul `_TEMPLATE.md`, que
+   l'outil ignore), mais la garde ne coûte rien et le piège se referme tout seul. */
+const FENCE = /^```([^\n]*)\n([\s\S]*?)^```[ \t]*$/gm;
+const bloc = (langue, source) =>
+  `<pre class="bloc"${langue ? ` data-l="${esc(langue)}"` : ""}>`
+  + `<code>${esc(source.replace(/\n$/, ""))}</code></pre>`;
+
+const prose = md => {
+  // Normalisé d'abord : en CRLF, le `\r` colle au nom de langage et la clôture ne
+  // reconnaît plus sa propre ligne. Les dossiers mélangent les deux fins de ligne.
+  const t = String(md).replace(/\r\n/g, "\n");
+  const bouts = [];
+  let i = 0;
+  for (const m of t.matchAll(FENCE)) {
+    if (m.index > i) bouts.push(paragraphes(t.slice(i, m.index)));
+    bouts.push(bloc(m[1].trim(), m[2]));
+    i = m.index + m[0].length;
+  }
+  // Un bloc jamais refermé ne matche pas : tout retombe dans le chemin prose, ce qui
+  // reste lisible. On préfère ça à une clôture devinée.
+  if (i < t.length) bouts.push(paragraphes(t.slice(i)));
+  return bouts.join("");
+};
 
 const OUVERT = s => s === "à venir" || s === "interrompu" || s === "différé";
 const SLUG = { "à venir":"ven", "interrompu":"int", "différé":"dif", "clos":"clos", "livré":"liv", "abandonné":"aba" };
