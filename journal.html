@@ -57,6 +57,11 @@ a{color:var(--outremer)}
 .voisin i{font-style:normal;font-variant-numeric:tabular-nums;color:var(--encre3);
   letter-spacing:.04em}
 .etat{font:400 var(--t2)/1.5 var(--mo);color:var(--encre2);margin:.55rem 0 0}
+/* L'export s'annonce, sans crier : c'est une nuance d'état, pas une alerte. La case figée
+   garde sa coche lisible mais perd son air cliquable. */
+.fige-bandeau{font:400 var(--t2)/1.5 var(--mo);color:var(--encre3);margin:.35rem 0 0}
+.case.fige input{opacity:.55;cursor:default}
+.case.fige label{cursor:default}
 .ong{display:flex;gap:.25rem;margin-top:1.1rem}
 .ong a{font:500 var(--t2)/1 var(--mo);text-decoration:none;color:var(--encre2);
   padding:.6rem .9rem;border-radius:2px 2px 0 0;background:var(--plat2)}
@@ -474,7 +479,14 @@ let D = null, RXL = null;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
   ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 
-const vsc = p => `vscode://file/${D.racine.replace(/\\/g, "/")}/${p}`;
+/* Sur un export, `vscode://` désignerait un chemin absolu de la machine qui a EXPORTÉ :
+   au mieux mort chez le lecteur, au pire ouvrant un autre fichier chez qui a la même
+   arborescence. L'adresse web du dépôt, dérivée du remote à l'export, vaut mieux — elle
+   ouvre le bon fichier à la bonne révision, chez n'importe qui. Sans remote, on rend un
+   texte inerte plutôt qu'un lien qui ment. */
+const vsc = p => D.statique
+  ? (D.web ? D.web + p : "")
+  : `vscode://file/${D.racine.replace(/\\/g, "/")}/${p}`;
 
 /* pastilles — posées APRÈS échappement ; un code absent de liens reste du texte */
 const RX_META = /[.*+?^${}()|[\]\\]/g;
@@ -972,7 +984,13 @@ function vueFiche(code){
 
 const item = (file, r) => {
   const id = `k${file.replace(/\W/g, "")}${r.ligne}`;
-  return `<li class="case"><input type="checkbox" id="${id}" ${r.fait ? "checked" : ""}
+  /* Sur un export, la case ne peut RIEN écrire : il n'y a pas de serveur derrière. La
+     laisser cliquable afficherait un geste qui échoue — le code reprend la main et
+     remet la case en place, mais proposer ce qu'on ne peut pas tenir reste un mensonge
+     d'interface. Elle est donc désactivée, et le titre dit pourquoi. */
+  const fige = D.statique
+    ? ` disabled title="Export en lecture seule — cocher se fait depuis le dépôt"` : "";
+  return `<li class="case${D.statique ? " fige" : ""}"><input type="checkbox" id="${id}" ${r.fait ? "checked" : ""}${fige}
     data-file="${esc(file)}" data-ligne="${r.ligne}">
     <label for="${id}">${ligne(r.texte)}</label></li>`;
 };
@@ -1306,6 +1324,16 @@ async function charger(){
      interne. Rien ne s'affiche quand on est seul — un sélecteur à une entrée est du
      bruit. Le port apparaît en second : c'est ce qu'on retient quand on cherche à
      revenir, et ça distingue deux clones du même dépôt. */
+  /* Un export dit ce qu'il est et de quand il date. Sans ça, une page ouverte depuis un
+     signet ressemble à s'y méprendre au journal vivant, et on lit un état d'il y a trois
+     semaines en le croyant courant. */
+  if (D.statique) {
+    const d = new Date(D.genere);
+    document.getElementById("sil").insertAdjacentHTML("afterend",
+      `<p class="fige-bandeau">Export en lecture seule — état du ${jour(D.genere.slice(0, 10))}`
+      + ` à ${String(d.getHours()).padStart(2, "0")}h${String(d.getMinutes()).padStart(2, "0")}.`
+      + ` Les cases se cochent depuis le dépôt.</p>`);
+  }
   document.getElementById("voisins").innerHTML = (D.voisins || []).length
     ? `<span class="sep">·</span>` + D.voisins.map(v =>
         `<a class="voisin" href="http://127.0.0.1:${v.port}/" title="${esc(v.racine)}">${esc(v.nom)}<i>${v.port}</i></a>`).join("")

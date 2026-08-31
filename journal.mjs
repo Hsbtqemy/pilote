@@ -3,14 +3,15 @@
 //   pilote            [--port 4123] [--dir pilotage] [--days 60]
 //   pilote verifier   [--dir pilotage] [--strict] [--json]
 //   pilote arreter    [--port 4123]
+//   pilote exporter   [dossier]
 // Sélecteur de journaux : --voisins 4120-4130 (défaut) ou --voisins 4123,4200
 // Aucune dépendance. Node 18+.
 
 import { createServer, get as httpGet } from "node:http";
 import { execFileSync } from "node:child_process";
-import { readFile, writeFile, readdir } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { join, relative, basename, dirname } from "node:path";
+import { join, relative, basename, dirname, isAbsolute } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 // Contrat de parsing partage avec pilotage/verifier.mjs -- voir journal-contrat.mjs.
 import { RX, frontmatter, walk, estPasse, constatsAudit, texteDeCase, lemmeArret } from "./journal-contrat.mjs";
@@ -44,6 +45,7 @@ if (args.includes("--help") || args.includes("-h") || args[0] === "aide") {
 COMMANDES
   pilote                ouvre le journal sur localhost:4123
   pilote arreter        ferme le journal
+  pilote exporter <dir> écrit un export statique lisible partout (défaut : journal-export)
   pilote verifier       contrôle le dossier ; code de retour non nul = l'outil lira mal
   pilote aide           ceci  (aussi --help, -h)
 
@@ -150,7 +152,12 @@ const voisins = async () => (await Promise.all(portsVoisins().map(p => sonde(p, 
                                    nom: String(v.racine).split(/[\\/]/).filter(Boolean).pop() } : null)
   .filter(Boolean);
 
-let enRoute = await sonde(PORT);
+// `exporter` ne sert rien : il ne doit NI sonder le port, NI remplacer quoi que ce soit.
+// Écrit sans cette garde, il tuait le serveur en cours parce qu'il le trouvait « périmé » —
+// une commande de lecture qui coupe la session de travail de celui qui la tape. La sonde
+// est sautée plutôt que ses conséquences filtrées : ne rien demander est plus sûr que
+// demander puis ignorer.
+let enRoute = args[0] === "exporter" ? null : await sonde(PORT);
 
 if (args[0] === "arreter") {
   if (!enRoute) { console.log(`Rien ne tourne sur le port ${PORT}.`); process.exit(0); }
@@ -875,6 +882,53 @@ async function reinitialiser({ file }) {
   const lines = (await readFile(abs, "utf8")).split(/\r?\n/).map(l =>
     RX.box.test(l) ? l.replace(/\[[xX]\]/, "[ ]") : l.replace(/^derniere:\s*.*$/, `derniere: ${today}`));
   await writeFile(abs, lines.join("\n"), "utf8");
+}
+
+// ---------- export statique ----------
+// La vue va chercher ses données par une URL RELATIVE (`fetch("journal.json")`). Deux
+// fichiers côte à côte sur n'importe quel hébergeur suffisent donc à la servir : vérifié,
+// le rendu est identique à l'octet près à celui du serveur. C'est ce qui rend un journal
+// lisible depuis un téléphone, où `localhost` n'existe pas.
+//
+// Trois choses mentiraient sans correction, et ce sont les seules :
+//   · les cases s'afficheraient actives et posteraient vers un `/cocher` absent ;
+//   · les liens `vscode://` désigneraient un chemin absolu de MA machine, au mieux mort,
+//     au pire ouvrant le mauvais fichier chez qui a la même arborescence ;
+//   · le sélecteur de journaux pointerait vers `127.0.0.1`, donc vers la machine du
+//     LECTEUR — c'est pourquoi il est retiré ici plutôt que traduit.
+//
+// L'adresse web du dépôt se dérive du remote, sans réseau : elle remplace `vscode://` et
+// vaut mieux que lui à distance, puisqu'elle ouvre le fichier à la bonne révision chez
+// celui qui lit.
+const adresseWeb = () => {
+  const u = gitEssai("remote", "get-url", "origin");
+  if (!u) return null;
+  const m = u.match(/^(?:https?:\/\/|git@|ssh:\/\/git@)([^/:]+)[/:](.+?)(?:\.git)?$/);
+  if (!m) return null;
+  const ref = git("rev-parse", "--abbrev-ref", "HEAD") || "HEAD";
+  return `https://${m[1]}/${m[2]}/blob/${ref}/`;
+};
+
+if (args[0] === "exporter") {
+  const dest = args[1] && !args[1].startsWith("--") ? args[1] : "journal-export";
+  // `join(ROOT, …)` collait la racine devant un chemin déjà absolu.
+  const abs = isAbsolute(dest) ? dest : join(ROOT, dest);
+  const charge = await build();
+  charge.statique = true;
+  charge.web = adresseWeb();
+  // Le sélecteur de voisins est local par nature : des ports de boucle locale. Un index
+  // des exports est un autre objet, à écrire à côté des exports, pas dans chacun.
+  delete charge.voisins;
+  await mkdir(abs, { recursive: true });
+  await writeFile(join(abs, "journal.json"), JSON.stringify(charge), "utf8");
+  await writeFile(join(abs, "index.html"), await readFile(join(OUTIL, "journal.html")), "utf8");
+  const ko = (s) => (s / 1024).toFixed(0);
+  console.log(`Export écrit dans ${abs}`);
+  console.log(`  index.html + journal.json  ·  ${ko(JSON.stringify(charge).length)} Ko`
+    + `  ·  ${charge.chantiers.length} fiches, ${charge.passes.length} passes`);
+  console.log(charge.web ? `  liens de fichier → ${charge.web}` : `  pas de remote : les liens de fichier seront inertes`);
+  console.log(`  lecture seule : les cases sont désactivées.`);
+  process.exit(0);
 }
 
 // ---------- serveur ----------

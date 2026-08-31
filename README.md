@@ -21,6 +21,21 @@ npx github:Hsbtqemy/pilote verifier   # le contrôleur du dossier
 npx github:Hsbtqemy/pilote arreter    # fermer le journal
 ```
 
+**Lire à distance.** `pilote exporter <dossier>` écrit deux fichiers — `index.html` et
+`journal.json` — qui se posent sur n'importe quel hébergeur statique, y compris GitHub
+Pages. La vue va chercher ses données par une URL relative, donc rien d'autre n'est
+nécessaire : pas de serveur, pas de base, pas de jeton. C'est ce qui rend un journal
+lisible depuis un téléphone, où `localhost` n'existe pas.
+
+L'export dit ce qu'il est : bandeau daté, cases désactivées — elles ne peuvent rien écrire
+sans serveur —, et les liens de fichier deviennent des liens web du dépôt, dérivés du
+remote. À distance ils valent mieux que `vscode://` : ils ouvrent le bon fichier à la
+bonne révision, chez n'importe qui.
+
+Sa fraîcheur est celle du dépôt. Régénéré à chaque push par une action CI, il ne perd que
+ce qui n'est pas encore poussé — c'est-à-dire ce qu'un lecteur distant ne pourrait pas
+voir de toute façon.
+
 **Plusieurs dépôts.** Lance un journal dans chacun, sur des ports voisins :
 `pilote` dans le premier, `pilote --port 4124` dans le second. Chacun découvre les autres
 en interrogeant les ports alentour et affiche un sélecteur dans son en-tête. Rien n'est
