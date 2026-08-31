@@ -44,6 +44,18 @@ a{color:var(--outremer)}
 .marque b{font:600 var(--t4)/1 var(--mo);letter-spacing:-.02em}
 .branche{font:400 var(--t1)/1 var(--mo);text-transform:uppercase;letter-spacing:.1em;
   color:var(--outremer);background:var(--outremer-pale);padding:.35em .6em;border-radius:2px}
+/* Les journaux voisins, à côté de la branche. Volontairement plus discrets qu'elle : la
+   branche dit où l'on est dans CE dépôt, les voisins disent qu'il en existe d'autres.
+   Cible haute pour rester touchable au doigt, la barre étant la seule zone de navigation
+   permanente de la page. */
+.marque .sep{color:var(--encre3);opacity:.5}
+.voisin{display:inline-flex;align-items:baseline;gap:.4em;text-decoration:none;
+  font:400 var(--t1)/1 var(--mo);text-transform:uppercase;letter-spacing:.1em;
+  color:var(--encre2);border:1px solid var(--verge);border-radius:2px;
+  padding:.5em .6em;margin-right:.3rem}
+.voisin:hover{border-color:var(--outremer);color:var(--outremer)}
+.voisin i{font-style:normal;font-variant-numeric:tabular-nums;color:var(--encre3);
+  letter-spacing:.04em}
 .etat{font:400 var(--t2)/1.5 var(--mo);color:var(--encre2);margin:.55rem 0 0}
 .ong{display:flex;gap:.25rem;margin-top:1.1rem}
 .ong a{font:500 var(--t2)/1 var(--mo);text-decoration:none;color:var(--encre2);
@@ -445,7 +457,7 @@ a{color:var(--outremer)}
 
 <header class="tete">
   <div class="tete-in">
-    <p class="marque"><b id="repo">…</b><span class="branche" id="br">…</span></p>
+    <p class="marque"><b id="repo">…</b><span class="branche" id="br">…</span><span id="voisins"></span></p>
     <p class="etat" id="sil"></p>
     <nav class="ong" id="tabs">
       <a href="#/">chantiers</a><a href="#/qa">passes</a><a href="#/frise">frise</a><a href="#/masses">masses</a><a href="#/fil">fil</a>
@@ -1289,6 +1301,15 @@ async function charger(){
   D = await r.json(); RXL = null;
   document.getElementById("repo").textContent = D.repo;
   document.getElementById("br").textContent = D.branche;
+  /* Les autres journaux ouverts. Des liens en dur vers leur port : chaque serveur reste
+     un dépôt, et passer de l'un à l'autre est une navigation, pas un changement d'état
+     interne. Rien ne s'affiche quand on est seul — un sélecteur à une entrée est du
+     bruit. Le port apparaît en second : c'est ce qu'on retient quand on cherche à
+     revenir, et ça distingue deux clones du même dépôt. */
+  document.getElementById("voisins").innerHTML = (D.voisins || []).length
+    ? `<span class="sep">·</span>` + D.voisins.map(v =>
+        `<a class="voisin" href="http://127.0.0.1:${v.port}/" title="${esc(v.racine)}">${esc(v.nom)}<i>${v.port}</i></a>`).join("")
+    : "";
   document.getElementById("sil").textContent = D.dernierJour
     ? `dernier commit le ${jour(D.dernierJour)} — il y a ${D.silenceCourant} jours`
     : "aucun commit";

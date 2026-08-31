@@ -3,6 +3,7 @@
 //   pilote            [--port 4123] [--dir pilotage] [--days 60]
 //   pilote verifier   [--dir pilotage] [--strict] [--json]
 //   pilote arreter    [--port 4123]
+// Sélecteur de journaux : --voisins 4120-4130 (défaut) ou --voisins 4123,4200
 // Aucune dépendance. Node 18+.
 
 import { createServer, get as httpGet } from "node:http";
@@ -53,6 +54,8 @@ OPTIONS DU JOURNAL
   --refs <a,b,c>    refs d'intégration, de l'amont vers l'aval, séparées par des virgules ;
                     défaut : celles de l'inventaire, sinon origin/main
   --trainee <n>     commits affichés sous une fiche, défaut 5
+  --voisins <p-p>   plage de ports balayée pour le sélecteur de journaux, ou liste
+                    séparée par des virgules ; défaut : les huit ports autour du sien
 
 OPTIONS DU CONTRÔLEUR
   --dir <nom>       comme ci-dessus
@@ -114,13 +117,38 @@ const EMPREINTE = empreinte();
 // Sonde en `node:http` brut, délibérément : il ne lit pas `HTTP_PROXY`, contrairement à
 // la plupart des clients. Un proxy d'entreprise qui intercepte la boucle locale
 // répondrait à la place du serveur, et la sonde mentirait.
-const sonde = (port) => new Promise(resolve => {
-  const req = httpGet({ host: "127.0.0.1", port, path: "/pilote", timeout: 900 },
+const sonde = (port, ms = 900) => new Promise(resolve => {
+  const req = httpGet({ host: "127.0.0.1", port, path: "/pilote", timeout: ms },
     res => { let b = ""; res.on("data", c => b += c);
              res.on("end", () => { try { resolve(JSON.parse(b)); } catch { resolve(null); } }); });
   req.on("error", () => resolve(null));
   req.on("timeout", () => { req.destroy(); resolve(null); });
 });
+
+// ---------- les journaux voisins ----------
+// Passer d'un journal à l'autre sans que le moteur sache lire plusieurs dépôts. La carte
+// d'identité `/pilote` dit déjà quelle racine sert un port : balayer une petite plage
+// suffit à dresser la liste des journaux ouverts, avec leur dépôt.
+//
+// C'est délibérément l'inverse du multi-racine dans le moteur. Celui-ci coûterait de
+// passer ROOT, DIR, CFG, REFS, DOCS, VEILLE et TETE en contexte — 55 références dans un
+// fichier de 894 lignes — et de mémoïser par racine ce qui l'est aujourd'hui par tête.
+// Le balayage donne le même geste à l'écran pour un coût mesuré à 19 ms, et chaque
+// serveur reste ce qu'il est : un dépôt, une config, un contrôleur.
+//
+// Un port qui répond autre chose est ignoré par construction : la sonde rend `null` dès
+// que la réponse n'est pas le JSON attendu.
+const PLAGE = (opt("voisins", "") || `${PORT - 3}-${PORT + 4}`);
+const portsVoisins = () => {
+  const m = String(PLAGE).match(/^(\d+)-(\d+)$/);
+  const l = m ? Array.from({ length: Math.max(0, Math.min(16, +m[2] - +m[1] + 1)) }, (_, i) => +m[1] + i)
+              : String(PLAGE).split(",").map(s => Number(s.trim())).filter(Boolean);
+  return l.filter(p => p > 0 && p < 65536 && p !== PORT);
+};
+const voisins = async () => (await Promise.all(portsVoisins().map(p => sonde(p, 250))))
+  .map((v, i) => v && v.pilote ? { port: portsVoisins()[i], racine: v.racine,
+                                   nom: String(v.racine).split(/[\\/]/).filter(Boolean).pop() } : null)
+  .filter(Boolean);
 
 let enRoute = await sonde(PORT);
 
@@ -811,6 +839,10 @@ async function build() {
     // documentation, et elle ne lit pas la config.
     docs: DOCS,
     racine: ROOT,
+    // Les autres journaux ouverts sur cette machine, pour le sélecteur. Recalculé à
+    // chaque construction plutôt que mémoïsé : la liste change quand on ouvre ou ferme
+    // un journal, pas quand HEAD bouge — la mémoire par tête serait le mauvais cadre.
+    voisins: await voisins(),
     genere: new Date().toISOString(),
     dernierJour: jours[jours.length - 1] || null,
     silenceCourant: jours.length

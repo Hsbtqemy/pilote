@@ -21,6 +21,12 @@ npx github:Hsbtqemy/pilote verifier   # le contrôleur du dossier
 npx github:Hsbtqemy/pilote arreter    # fermer le journal
 ```
 
+**Plusieurs dépôts.** Lance un journal dans chacun, sur des ports voisins :
+`pilote` dans le premier, `pilote --port 4124` dans le second. Chacun découvre les autres
+en interrogeant les ports alentour et affiche un sélecteur dans son en-tête. Rien n'est
+fusionné, et c'est voulu : la frise partage une échelle, les masses reposent sur les aires
+déclarées, les collisions sur des chemins de fichiers — mêler deux dépôts en inventerait.
+
 **La commande du journal se retape sans réfléchir.** Elle sonde le port avant d'écouter
 et fait ce qu'il faut : rien ne tourne, elle démarre ; ton journal tourne déjà, elle
 donne l'adresse et sort en 165 ms sans relire le dépôt ; l'outil a été mis à jour depuis,
