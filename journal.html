@@ -170,6 +170,19 @@ a{color:var(--outremer)}
 .prose strong{font-weight:600;color:var(--encre)}
 .prose code,.lemme code,.lemme-f code,.case code,.vide code{font:400 .85em/1 var(--mo);
   background:var(--plat2);padding:.15em .35em;border-radius:2px;color:var(--encre)}
+/* Une table de fiche compare presque toujours des CHIFFRES — un avant/après, un seuil et
+   sa mesure. D'où `tabular-nums` et l'alignement à droite des cellules purement
+   numériques, qui met les ordres de grandeur les uns sous les autres. `max-width` est
+   levée : la prose tient en 38rem pour la lecture, une table a besoin de sa largeur. */
+.prose table{border-collapse:collapse;margin:0 0 1.1rem;font:400 var(--t2)/1.5 var(--sr);
+  color:var(--encre2);width:100%;max-width:44rem}
+.prose thead th{font:500 var(--t1)/1 var(--mo);text-transform:uppercase;
+  letter-spacing:.09em;color:var(--encre3);text-align:left;padding:0 .8rem .45rem 0;
+  border-bottom:1px solid var(--verge)}
+.prose tbody td{padding:.45rem .8rem .45rem 0;border-bottom:1px solid var(--verge);
+  vertical-align:baseline;font-variant-numeric:tabular-nums}
+.prose tbody tr:last-child td{border-bottom:0}
+.prose th:last-child,.prose td:last-child{padding-right:0}
 .zone{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;
   font:500 var(--t1)/1 var(--mo);text-transform:uppercase;letter-spacing:.13em;
   color:var(--encre3);margin:2rem 0 .6rem}
@@ -466,8 +479,29 @@ function pastilles(html){
 const inline = s => s.replace(/`([^`]+)`/g, "<code>$1</code>")
                      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 const ligne = t => pastilles(inline(esc(t)));
-const prose = md => pastilles(esc(md).split(/\n{2,}/)
-  .map(p => "<p>" + inline(p.replace(/\n/g, " ")) + "</p>").join(""));
+/* Un tableau markdown est le seul bloc de la prose dont les RETOURS À LA LIGNE portent du
+   sens. `prose` les remplaçait par des espaces — comme pour tout paragraphe — et rendait
+   la table en une file de barres verticales, ligne de séparation `|---|---|` comprise.
+   Mesuré le 2026-08-27 : six fiches d'un dépôt réel, 58 lignes de tableau, toutes
+   illisibles. Le rédacteur qui pose une table le fait justement là où la prose échoue —
+   une comparaison chiffrée, un avant/après — donc c'est le passage le plus dense qui
+   était le plus abîmé.
+
+   On ne rend pas tout markdown pour autant : reconnaître un bloc dont CHAQUE ligne est
+   une rangée, c'est sûr et local. `esc` a déjà couru, les barres sont donc intactes. */
+const estTable = lignes => lignes.length >= 2 && lignes.every(l => l.trim().startsWith("|"))
+  && /^\|[\s:|-]+\|$/.test(lignes[1].trim());
+const cellules = l => l.trim().replace(/^\||\|$/g, "").split("|").map(c => inline(c.trim()));
+const table = lignes => {
+  const [tete, , ...corps] = lignes;
+  return `<table><thead><tr>${cellules(tete).map(c => `<th>${c}</th>`).join("")}</tr></thead>`
+    + `<tbody>${corps.map(l => `<tr>${cellules(l).map(c => `<td>${c}</td>`).join("")}</tr>`)
+        .join("")}</tbody></table>`;
+};
+const prose = md => pastilles(esc(md).split(/\n{2,}/).map(p => {
+  const lignes = p.split("\n").filter(l => l.trim());
+  return estTable(lignes) ? table(lignes) : "<p>" + inline(p.replace(/\n/g, " ")) + "</p>";
+}).join(""));
 
 const OUVERT = s => s === "à venir" || s === "interrompu" || s === "différé";
 const SLUG = { "à venir":"ven", "interrompu":"int", "différé":"dif", "clos":"clos", "livré":"liv", "abandonné":"aba" };
