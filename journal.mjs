@@ -56,6 +56,7 @@ OPTIONS DU JOURNAL
   --refs <a,b,c>    refs d'intégration, de l'amont vers l'aval, séparées par des virgules ;
                     défaut : celles de l'inventaire, sinon origin/main
   --trainee <n>     commits affichés sous une fiche, défaut 5
+  --web <url>       base des liens de fichier de l'export ; sinon dérivée du remote
   --voisins <p-p>   plage de ports balayée pour le sélecteur de journaux, ou liste
                     séparée par des virgules ; défaut : les huit ports autour du sien
 
@@ -915,7 +916,12 @@ if (args[0] === "exporter") {
   const abs = isAbsolute(dest) ? dest : join(ROOT, dest);
   const charge = await build();
   charge.statique = true;
-  charge.web = adresseWeb();
+  // `--web` prime sur la dérivation. En CI, l'adresse est CONNUE — GitHub la donne dans
+  // son environnement — alors qu'ici on la devine à partir du remote. Répétée à blanc
+  // dans un clone local, la dérivation rendait « pas de remote » et l'export sortait
+  // avec des liens inertes : deviner marche là où l'on n'a rien de mieux, pas là où
+  // l'on a la réponse.
+  charge.web = opt("web", null) || adresseWeb();
   // Le sélecteur de voisins est local par nature : des ports de boucle locale. Un index
   // des exports est un autre objet, à écrire à côté des exports, pas dans chacun.
   delete charge.voisins;
