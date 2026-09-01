@@ -647,10 +647,18 @@ const ditCollisions = (l) => l.slice(0, 3).map(x => {
 
 /* Un champ que seule une version récente du serveur produit. On ne compare pas des
    numéros de version — il faudrait les tenir à jour des deux côtés — mais la présence de
-   ce que la page a besoin de lire. Quand ce test devient faux, il suffit de le pointer
-   vers un champ plus récent. */
-const serveurPerime = () =>
-  D.chantiers.length > 0 && D.chantiers[0].ficheDate === undefined;
+   ce que la page a besoin de lire.
+
+   La sentinelle visait `ficheDate`, de deux générations en arrière : un serveur lancé
+   avant le sélecteur de journaux avait ce champ, passait donc pour à jour, et servait la
+   vue neuve SANS `voisins` — le sélecteur disparaissait en silence. Constaté sur un vrai
+   couple de journaux le 2026-08-31 : l'un voyait l'autre, l'inverse non.
+   La leçon n'est pas « déplacer la sentinelle une fois » mais qu'elle vieillit à chaque
+   champ ajouté, et que rien ne le rappelle. À repointer avec le prochain.
+
+   `voisins` est un tableau vide sur un export statique, jamais absent : c'est pour ça que
+   l'export le VIDE au lieu de le supprimer. */
+const serveurPerime = () => D.voisins === undefined;
 
 const bandePerime = () => !serveurPerime() ? "" :
   `<p class="perime"><b>Le serveur tourne sur une version antérieure de

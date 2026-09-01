@@ -924,7 +924,11 @@ if (args[0] === "exporter") {
   charge.web = opt("web", null) || adresseWeb();
   // Le sélecteur de voisins est local par nature : des ports de boucle locale. Un index
   // des exports est un autre objet, à écrire à côté des exports, pas dans chacun.
-  delete charge.voisins;
+  //
+  // VIDÉ, pas SUPPRIMÉ. C'est ce champ qui sert de sentinelle à « serveur périmé » : le
+  // supprimer ferait passer chaque export pour un moteur ancien. Un tableau vide dit
+  // « je sais faire, il n'y a personne » ; l'absence dirait « je ne sais pas faire ».
+  charge.voisins = [];
   await mkdir(abs, { recursive: true });
   await writeFile(join(abs, "journal.json"), JSON.stringify(charge), "utf8");
   await writeFile(join(abs, "index.html"), await readFile(join(OUTIL, "journal.html")), "utf8");
