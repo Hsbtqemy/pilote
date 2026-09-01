@@ -730,6 +730,27 @@ function bandeBord(){
   const versFiche = (code) => byCode(code)
     ? `<a href="#/c/${encodeURIComponent(code)}">${esc(code)}</a>` : esc(code);
 
+  /* La première question posée à cet écran n'est pas « qu'est-ce qui traîne » mais « je
+     reprends quoi ». Le tri des bacs y répond DÉJÀ le plus souvent, et c'est mesuré : sur
+     les quatorze derniers jours actifs, DEUX seulement voient les chantiers touchés se
+     répartir sur plusieurs bacs — les douze autres, tout est en tête d'une même section.
+     Cette ligne ne paie donc que pour ces deux-là, plus le coup d'œil qui évite de lire
+     des dates sur vingt cartes. Elle est délibérément une ligne de bandeau et non un
+     encart : le gain mesuré ne justifiait pas un bloc à lui.
+
+     Pas de seuil. `silence === 0` désigne le dernier jour où l'on a travaillé, pas les N
+     derniers jours : il se recale seul, hier ou la semaine dernière. Choisir un N est
+     exactement ce pour quoi le seuil de dormance a été coupé (P-7, « à reposer si le tri
+     seul ne suffit pas »).
+
+     La date est nommée plutôt que traduite en « aujourd'hui » : `silenceCourant` vaut
+     **1** un jour qui porte des commits, parce qu'il arrondit un écart entre minuit UTC
+     et l'heure courante. Vérifié le 2026-09-01, `dernierJour` valant ce jour même. */
+  const repris = D.chantiers.filter(c => OUVERT(c.statut) && c.silence === 0);
+  if (repris.length) l.push({ cle: "reprise", val: String(repris.length),
+    note: `dernier jour actif, le ${esc(D.dernierJour)} · `
+        + repris.map(c => versFiche(c.code)).join(" ") });
+
   if (v) {
     const pc = Math.round(v.net / v.seuil * 100);
     l.push({ cle: `veille <code>${esc(v.fichier.split("/").pop())}</code>`,
