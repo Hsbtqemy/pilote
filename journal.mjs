@@ -984,7 +984,15 @@ createServer(async (req, res) => {
     console.error(`Relance avec --port sur un autre numéro.`);
     process.exit(1);
   })
-  .listen(PORT, () => {
+  // BOUCLE LOCALE, explicitement. `listen(PORT)` sans hôte écoute sur 0.0.0.0 et [::] —
+  // toutes les interfaces. Mesuré le 2026-08-31 : le journal répondait 200 sur l'adresse
+  // réseau de la machine, donc lisible par quiconque sur le même wifi, et ses deux routes
+  // d'écriture (`/cocher`, `/reinitialiser`) sont ouvertes, sans jeton. La garde de chemin
+  // borne CE QU'ON PEUT écrire, pas QUI peut écrire.
+  //
+  // Le README promettait « rien ne sort de la machine » : c'était vrai des données, faux
+  // du service. Un défaut de porte, pas de serrure.
+  .listen(PORT, "127.0.0.1", () => {
     console.log(`Journal de bord  →  http://localhost:${PORT}`);
     console.log(`${ROOT}  ·  ${DIR}/  ·  ${DAYS} jours de commits  ·  « pilote arreter » pour le fermer`);
   });

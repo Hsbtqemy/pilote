@@ -21,6 +21,10 @@ npx github:Hsbtqemy/pilote verifier   # le contrôleur du dossier
 npx github:Hsbtqemy/pilote arreter    # fermer le journal
 ```
 
+Le serveur écoute sur **la boucle locale seulement** (`127.0.0.1`). Rien n'est joignable
+depuis le réseau : ni la lecture, ni les deux routes d'écriture des cases, qui n'ont pas de
+jeton. Pour lire ailleurs, l'export ci-dessous — jamais le serveur exposé.
+
 **Lire à distance.** `pilote exporter <dossier>` écrit deux fichiers — `index.html` et
 `journal.json` — qui se posent sur n'importe quel hébergeur statique, y compris GitHub
 Pages. La vue va chercher ses données par une URL relative, donc rien d'autre n'est
