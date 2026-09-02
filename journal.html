@@ -371,6 +371,21 @@ a{color:var(--outremer)}
 .fr-m0{transform:none}
 .fr-m{position:absolute;top:0;font:400 var(--t1)/1 var(--mo);color:var(--encre3);
   transform:translateX(-50%);white-space:nowrap}
+.pg{position:relative;margin:.1rem 0 0}
+.pg-g{display:block;width:100%;height:9rem}
+.pg-tot{fill:var(--outremer-pale)}
+.pg-fai{fill:var(--verdet);opacity:.8}
+.pg-lig{fill:none;stroke:var(--encre3);stroke-width:1;vector-effect:non-scaling-stroke}
+.pg-liste{margin:.9rem 0 0}
+.pg-l{display:grid;grid-template-columns:var(--gout) 1fr;align-items:center;min-height:1.25rem}
+.pg-l+.pg-l{margin-top:.12rem}
+.pg-c{font:400 .625rem/1 var(--mo);color:var(--encre2);text-decoration:none;padding-right:.55rem;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.pg-ch{font-weight:500;text-transform:uppercase;letter-spacing:.09em;color:var(--outremer)}
+.pg-p{position:relative;display:grid;grid-template-columns:1fr auto;align-items:center;gap:.5rem}
+.pg-s{display:block;width:100%;height:1.15rem}
+.pg-n{font:400 var(--t1)/1 var(--mo);color:var(--encre3);font-style:normal;
+  min-width:4.2rem;text-align:right}
 .fr-leg{font:400 var(--t1)/1.5 var(--mo);color:var(--encre3);margin:.9rem 0 0}
 .fr-leg b{font-weight:500;color:var(--encre2)}
 @media (max-width:900px){
@@ -656,9 +671,11 @@ const ditCollisions = (l) => l.slice(0, 3).map(x => {
    La leçon n'est pas « déplacer la sentinelle une fois » mais qu'elle vieillit à chaque
    champ ajouté, et que rien ne le rappelle. À repointer avec le prochain.
 
-   `voisins` est un tableau vide sur un export statique, jamais absent : c'est pour ça que
-   l'export le VIDE au lieu de le supprimer. */
-const serveurPerime = () => D.voisins === undefined;
+   Repointée sur `progression` le 2026-09-02, en appliquant la consigne ci-dessus. Elle
+   tient les deux cas limites : un dépôt sans historique de dossier rend un tableau VIDE
+   et non l'absence du champ, et l'export statique le recopie tel quel. `voisins`, lui,
+   reste vidé plutôt que supprimé par l'export — mais il n'est plus la sentinelle. */
+const serveurPerime = () => D.progression === undefined;
 
 const bandePerime = () => !serveurPerime() ? "" :
   `<p class="perime"><b>Le serveur tourne sur une version antérieure de
@@ -1165,6 +1182,141 @@ function barreCarte(c, e){
     style="left:${d1}%;width:max(3px,${(d2 - d1).toFixed(2)}%)"></span></span>`;
 }
 
+/* Les traits de mois d'un axe. Le premier de chaque mois compris dans l'intervalle : les
+   mois n'ont pas la même longueur, un dégradé répété ne tomberait pas juste. Le mois du
+   début n'a pas son 1er dans l'intervalle — sans le cas `trait:false`, la région la plus
+   à gauche reste sans étiquette et on ne sait pas où l'axe commence.
+   Extrait de `vueFrise` le 2026-09-02 pour servir aussi l'axe de la progression, qui ne
+   couvre pas la même période. */
+function jalonsMois(lo, b){
+  const out = [];
+  const d0 = new Date(lo); d0.setUTCDate(1);
+  for (let x = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), 1));
+       x.getTime() <= b + JOUR;
+       x = new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 1, 1))) {
+    const s = x.toISOString().slice(0, 10);
+    const nom = x.toLocaleDateString("fr-FR", { month: "short", timeZone: "UTC" });
+    if (tps(s) >= lo) out.push({ s, nom, trait: true });
+    else if (!out.length && tps(s) + 32 * JOUR > lo)
+      out.push({ s: new Date(lo).toISOString().slice(0, 10), nom, trait: false });
+  }
+  return out;
+}
+
+/* ---------------- progression ---------------- */
+/* La frise dit QUAND un chantier a vécu. Elle ne dit pas s'il a avancé : une barre de
+   deux mois est la même qu'on ait coché trois cases ou trois cents. Ces deux blocs-là
+   le disent, au global puis fiche par fiche.
+
+   Axe séparé, et c'est mesuré : la frise couvre le 18 mai → 2 septembre, le dossier
+   `pilotage/` n'existe que depuis le 19 août. Posée sur l'axe de la frise, toute la
+   progression tenait dans les 13 % de droite. Deux axes étiquetés valent mieux qu'un
+   axe commun illisible — au prix qu'il faut dire, sous les deux, ce qu'ils couvrent. */
+function progAxe(){
+  const p = D.progression || [];
+  if (!p.length) return null;
+  const lo = tps(p[0][0]) - JOUR;
+  const b = tps(D.dernierJour || p[p.length - 1][0]);
+  const amp = (b + JOUR) - lo;
+  return { lo, b, amp, pc: d => Math.max(0, Math.min(100, (tps(d) - lo) / amp * 100)) };
+}
+
+/* Les évènements sont des SOLDES du jour : cocher une case fait −1 ouvert et +1 fait, le
+   même jour, dans la même ligne. C'est la somme courante qui donne l'état — l'évènement
+   seul ne dit que le mouvement. */
+function progSerie(ev){
+  const j = new Map();
+  for (const [d, , df, dof] of ev) {
+    const e = j.get(d) || [0, 0]; e[0] += df; e[1] += dof; j.set(d, e);
+  }
+  let f = 0, o = 0;
+  return [...j.keys()].sort().map(d => {
+    const e = j.get(d); f += e[0]; o += e[1];
+    return { d, faits: f, total: f + o };
+  });
+}
+
+/* Un escalier, pas une interpolation. Entre deux commits le compte ne monte pas
+   doucement : il ne bouge pas. Une droite entre deux points dessinerait des journées de
+   travail qui n'ont pas eu lieu — et il y a des trous réels dans le dossier, les 29 et
+   30 août n'ont aucun commit. */
+function progChemin(pts, cle, ax, max, h){
+  if (!pts.length || !max) return "";
+  const y = v => (h - v / max * h).toFixed(2);
+  let d = "", py = null;
+  for (const p of pts) {
+    const x = ax.pc(p.d).toFixed(2), ny = y(p[cle]);
+    d += py === null ? `M${x},${ny}` : `L${x},${py}L${x},${ny}`;
+    py = ny;
+  }
+  return d + `L100,${py}`;
+}
+/* L'aire se referme sur le PREMIER point, pas sur zéro : avant lui il n'y a pas « zéro
+   case », il n'y a pas de dossier. Un remplissage parti du bord gauche se lirait comme
+   un fond de courbe à plat. */
+const progAire = (ch, h, x0) => ch ? `${ch}L100,${h}L${x0.toFixed(2)},${h}Z` : "";
+
+function blocProg(S, ax, max, h){
+  const x0 = ax.pc(S[0].d), cT = progChemin(S, "total", ax, max, h);
+  return `<path class="pg-tot" d="${progAire(cT, h, x0)}"/>
+    <path class="pg-fai" d="${progAire(progChemin(S, "faits", ax, max, h), h, x0)}"/>
+    <path class="pg-lig" d="${cT}"/>`;
+}
+
+function vueProgression(){
+  const ev = D.progression || [];
+  const ax = progAxe();
+  if (!ax || !ev.length) return "";
+  const S = progSerie(ev), fin = S[S.length - 1], max = fin.total || 1, H = 100;
+
+  const mois = jalonsMois(ax.lo, ax.b);
+  const axe = `<div class="fr-axe"><span></span><div>${mois.map(m =>
+    `<span class="fr-m${m.trait ? "" : " fr-m0"}" style="left:${ax.pc(m.s).toFixed(2)}%">${esc(m.nom)}</span>`).join("")}</div></div>`;
+
+  /* Chaque fiche est ramenée à SON propre maximum, pas à celui du dossier. Une passe de
+     17 points et un chantier de 400 partagent la même hauteur de ligne ; à échelle
+     commune, la passe serait un trait plat indiscernable d'un chantier mort. Ce qui se
+     lit d'une ligne à l'autre est donc la FORME — quand ça monte, quand ça stagne — et
+     le compte exact est écrit à droite. */
+  const etiq = new Map();
+  for (const c of D.chantiers) etiq.set(c.file, { t: c.code, h: `#/c/${encodeURIComponent(c.code)}`, ch: true });
+  for (const p of D.passes) etiq.set(p.file, { t: p.nom, h: `#/qa/${encodeURIComponent(p.file)}`, ch: false });
+
+  const parF = new Map();
+  for (const e of ev) { if (!parF.has(e[1])) parF.set(e[1], []); parF.get(e[1]).push(e); }
+
+  const lignes = [...parF].map(([f, l]) => {
+    const s = progSerie(l), d = s[s.length - 1];
+    return { f, s, faits: d.faits, total: d.total, e: etiq.get(f) };
+  }).sort((a, b) => b.total - a.total || a.f.localeCompare(b.f));
+
+  const ligne = r => {
+    const n = r.e ? `<a class="pg-c${r.e.ch ? " pg-ch" : ""}" href="${r.e.h}">${esc(r.e.t)}</a>`
+      : `<span class="pg-c">${esc(r.f.replace(/^.*\//, ""))}</span>`;
+    return `<div class="pg-l">${n}<div class="pg-p"
+      title="${esc(r.e ? r.e.t : r.f)} — ${r.faits} faits sur ${r.total} · ${esc(r.f)}"><svg class="pg-s" viewBox="0 0 100 20"
+      preserveAspectRatio="none" aria-hidden="true">${blocProg(r.s, ax, r.total || 1, 20)}</svg>
+      <i class="pg-n">${r.faits}/${r.total}</i></div></div>`;
+  };
+
+  return `<h2 class="sec"><span>Progression</span>
+      <span class="n">${fin.faits} faits · ${fin.total - fin.faits} restants · ${S[0].d} → ${fin.d}</span></h2>
+    <div class="frise">
+      <div class="pg"><div class="fr-fond">${mois.filter(m => m.trait).map(m =>
+        `<span class="fr-mois" style="left:${ax.pc(m.s).toFixed(2)}%"></span>`).join("")}</div>
+        <svg class="pg-g" viewBox="0 0 100 ${H}" preserveAspectRatio="none"
+          aria-hidden="true">${blocProg(S, ax, max, H)}</svg></div>
+      ${axe}
+      <p class="fr-leg"><b>aire verte</b> les cases cochées &middot; <b>l'aire au-dessus</b>
+        ce qui reste ouvert &mdash; l'écart entre les deux EST le reliquat &middot;
+        <b>escalier</b> et non courbe : entre deux commits le compte ne bouge pas
+        &middot; la courbe lit l'historique <b>commité</b>, donc ce qui vient d'être coché
+        depuis l'écran n'y est pas encore &middot; chaque ligne est ramenée à son propre
+        maximum, la forme se compare, pas la hauteur</p>
+      <div class="pg-liste">${lignes.map(ligne).join("")}</div>
+    </div>`;
+}
+
 /* ---------------- frise ---------------- */
 /* Ce que la carte d'un chantier ne peut pas dire : sa FORME dans le temps. Mesuré sur
    quinze fiches, deux chantiers affichaient une carte identique — même statut, silence
@@ -1181,21 +1333,7 @@ function vueFrise(){
   const { lo, b, avant, pc } = e;
   const t = tps;
 
-  /* Traits de mois. Le premier de chaque mois compris dans l'intervalle : les mois n'ont
-     pas la même longueur, un dégradé répété ne tomberait pas juste. */
-  const mois = [];
-  const d0 = new Date(lo); d0.setUTCDate(1);
-  for (let x = new Date(Date.UTC(d0.getUTCFullYear(), d0.getUTCMonth(), 1));
-       x.getTime() <= b + JOUR;
-       x = new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 1, 1))) {
-    const s = x.toISOString().slice(0, 10);
-    const nom = x.toLocaleDateString("fr-FR", { month: "short", timeZone: "UTC" });
-    /* Le mois du début n'a pas son 1er dans l'intervalle : sans ce cas, la région la plus
-       à gauche reste sans étiquette et on ne sait pas où l'axe commence. Il est posé au
-       bord, sans trait de séparation. */
-    if (t(s) >= lo) mois.push({ s, nom, trait: true });
-    else if (!mois.length && t(s) + 32 * JOUR > lo) mois.push({ s: new Date(lo).toISOString().slice(0, 10), nom, trait: false });
-  }
+  const mois = jalonsMois(lo, b);
 
   const ordre = D.chantiers.slice().sort((x, y) =>
     String(x.premier?.date || x.ficheDate || "9999").localeCompare(String(y.premier?.date || y.ficheDate || "9999")));
@@ -1235,7 +1373,10 @@ function vueFrise(){
     <div class="fr-t">${barre(p.entree, p.derniere, "fr-q",
       `${p.entree || "?"} → ${p.derniere || "jamais rejouée"} · ${p.faits}/${p.total}`)}</div></div>`;
 
-  return `<div class="frise">
+  return vueProgression()
+    + `<h2 class="sec"><span>Étendue</span><span class="n">${
+        new Date(lo).toISOString().slice(0, 10)} → ${D.dernierJour || "?"}</span></h2>
+    <div class="frise">
     <div class="fr-corps">
       <div class="fr-fond">${mois.filter(m => m.trait).map(m => `<span class="fr-mois" style="left:${pc(m.s)}%"></span>`).join("")}</div>
       ${ordre.map(c => ligne(c) + D.passes.filter(p => p.chantier === c.code).map(ligneP).join("")).join("")}

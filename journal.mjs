@@ -763,6 +763,55 @@ async function index() {
 }
 
 // ---------- assemblage ----------
+// Progression du dossier, rejouée depuis les diffs. La frise trace une ÉTENDUE — quand un
+// chantier a été vivant — et rien dedans ne dit s'il a avancé. Une case cochée sort du
+// diff comme `-- [ ]` suivi de `+- [x]` : le solde par jour et par fiche donne l'avancée.
+//
+// Le pathspec est le DOSSIER, pas `pilotage/*.md`. Mesuré : le second rate les fichiers
+// d'un sous-dossier — `*` ne traverse pas le `/` ici — et perdait 2 commits sur 234, soit
+// 7 cases. Le filtre `.md` se fait donc sur l'en-tête du diff, où le chemin est complet.
+//
+// La grammaire est celle du contrat (`RX.box`), pas une expression maison : la courbe doit
+// compter EXACTEMENT ce que les écrans comptent, puces `*` et indentation comprises.
+//
+// Mémoïsé sur la tête — 1,4 Mo de diff et une seconde de git pour une donnée qui ne bouge
+// qu'au commit. Conséquence assumée : ce qu'on coche depuis l'écran n'entre dans la courbe
+// qu'une fois commité. C'est un historique, pas un état ; les deux ne se contredisent pas,
+// ils ne datent pas de la même chose. Vérifié le 2026-09-02 : reconstitution 770 faits
+// pour 778 sur le disque, l'écart valant exactement les 8 cases non commitées de l'instant.
+const progression = () => surTete("progression", () => {
+  const brut = gitEssai("log", "-p", "--reverse", "--format=%x1e%ad", "--date=short", "--", DIR);
+  if (!brut) return [];
+  const par = new Map();
+  let jour = null, fichier = null, garde = false;
+  for (const l of brut.split("\n")) {
+    if (l.charCodeAt(0) === 30) { jour = l.slice(1).trim(); continue; }
+    if (l.startsWith("diff --git ")) { fichier = null; garde = false; continue; }
+    // Une suppression n'a de chemin que du côté `a/`, une création que du côté `b/`.
+    // Prendre les deux et ne trancher qu'à la seconde ligne évite de perdre les items
+    // d'une fiche supprimée — qui sortent bel et bien du compte.
+    if (l.startsWith("--- ")) { if (l.startsWith("--- a/")) fichier = l.slice(6); continue; }
+    if (l.startsWith("+++ ")) {
+      if (l.startsWith("+++ b/")) fichier = l.slice(6);
+      // Les fichiers en `_` sont les gabarits du dossier, pas des documents : `pilotage()`
+      // ne les compte pas en chantiers, la courbe ne les compte pas non plus. Mesuré sur
+      // AGRAFES : `_TEMPLATE.md` apportait 9 cases d'exemple, seul fichier de la courbe
+      // rattaché à aucune fiche ni passe.
+      garde = /\.md$/.test(fichier || "") && !/(^|\/)_/.test(fichier || ""); continue;
+    }
+    if (!garde || !jour || (l[0] !== "+" && l[0] !== "-")) continue;
+    const b = RX.box.exec(l.slice(1));
+    if (!b) continue;
+    const cle = jour + "\x1f" + fichier;
+    let e = par.get(cle);
+    if (!e) par.set(cle, e = [0, 0]);            // [faits, ouverts]
+    e[b[1] === " " ? 1 : 0] += l[0] === "+" ? 1 : -1;
+  }
+  return [...par].filter(([, e]) => e[0] || e[1])
+    .map(([k, e]) => { const [d, f] = k.split("\x1f"); return [d, f, e[0], e[1]]; })
+    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+});
+
 async function build() {
   TETE = null;   // une lecture de HEAD par requête, pas une par clé de mémo
 
@@ -856,6 +905,7 @@ async function build() {
     silenceCourant: jours.length
       ? Math.round((Date.now() - Date.parse(jours[jours.length - 1])) / 864e5) : null,
     chantiers, passes, liens, masses: mss, branches: enVol,
+    progression: progression(),
     veille: gardeFou(), controle: controleur(),
     commits: commits.filter(c => c.date >= depuis)
   };
