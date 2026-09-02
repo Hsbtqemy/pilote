@@ -745,10 +745,27 @@ function bandeBord(){
 
      La date est nommée plutôt que traduite en « aujourd'hui » : `silenceCourant` vaut
      **1** un jour qui porte des commits, parce qu'il arrondit un écart entre minuit UTC
-     et l'heure courante. Vérifié le 2026-09-01, `dernierJour` valant ce jour même. */
-  const repris = D.chantiers.filter(c => OUVERT(c.statut) && c.silence === 0);
+     et l'heure courante. Vérifié le 2026-09-01, `dernierJour` valant ce jour même.
+
+     Le jour est celui du dernier chantier OUVERT touché, et non `dernierJour`, qui est
+     le dernier jour actif du dépôt. La première version prenait `silence === 0`, donc
+     se mesurait au dépôt : cassée à la première épreuve, et par elle-même — le commit
+     qui l'installait ne citait aucun chantier, a fait avancer le dernier jour actif d'un
+     cran et a poussé tout le monde à `silence 1`. La ligne n'affichait plus rien. Ce
+     n'est pas de la malchance : 74 commits sur 181 ne portent aucun code de chantier
+     (la ligne « commits en vol sans fiche », juste en dessous, le compte), et n'importe
+     lequel — tenue, verrou de dépendances, CI — vidait la ligne. Se caler sur les
+     chantiers plutôt que sur le dépôt rend le geste insensible à ce qu'on n'a pas
+     rattaché. */
+  const ouverts = D.chantiers.filter(c => OUVERT(c.statut) && c.dernier);
+  /* PAS `jour` : c'est le nom de la fonction globale qui met une date en toutes lettres,
+     et `bandeBord` s'en sert plus bas. La déclarer ici la masquait sur toute la portée
+     de la fonction — « jour is not a function », attrapé par le `catch` de `charger()`,
+     qui affiche « Impossible de joindre le serveur » alors que le serveur répondait. */
+  const seance = ouverts.reduce((m, c) => c.dernier.date > m ? c.dernier.date : m, "");
+  const repris = ouverts.filter(c => c.dernier.date === seance);
   if (repris.length) l.push({ cle: "reprise", val: String(repris.length),
-    note: `dernier jour actif, le ${esc(D.dernierJour)} · `
+    note: `dernier travail sur un chantier, le ${jour(seance)} · `
         + repris.map(c => versFiche(c.code)).join(" ") });
 
   if (v) {
