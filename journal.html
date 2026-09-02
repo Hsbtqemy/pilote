@@ -398,6 +398,32 @@ a{color:var(--outremer)}
   color:var(--encre3);margin:0 0 .3rem}
 .pg-cap i{font-style:normal;text-transform:none;letter-spacing:0;font-weight:400;
   margin-left:.5rem;opacity:.85}
+.pb{margin-top:.75rem}
+.pb-in{position:relative;height:var(--rangs)}
+.pb-t{position:absolute;width:1px;background:var(--encre3);opacity:.5}
+.pb-x{position:absolute;display:block;text-decoration:none;background:var(--plat);
+  border-left:2.5px solid var(--encre3);padding:.3rem .45rem;border-radius:1px;
+  font:400 var(--t1)/1.35 var(--mo);color:var(--encre2);overflow:hidden;
+  height:calc(var(--hr) - .55rem)}
+.pb-x b{display:block;font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+.pb-x b a{color:var(--encre);text-decoration:none}
+.pb-x b a:hover{text-decoration:underline}
+.pb-p{display:block}
+.pb-p i{font-style:normal;opacity:.55}
+.pb-d,.pb-n{display:block;color:var(--encre3)}
+.pb-ti{display:block;color:var(--encre2);font-family:var(--sr);font-size:.75rem;
+  line-height:1.3;margin:.15rem 0}
+/* Coupée à l'AFFICHAGE et non à la source. Tronquer le markdown avant de le rendre
+   tranchait au milieu d'un `code` ou d'un **gras** : `ligne()` produisait alors des
+   balises non refermées, et la prose du point de reprise s'échappait de la boîte pour
+   se répandre sur la bande — vu à l'écran, trois pastilles flottant hors de toute
+   carte. Le navigateur, lui, coupe des LIGNES, jamais du balisage. */
+.pb-a{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;
+  color:var(--encre3);font-family:var(--sr);font-size:.7rem;line-height:1.35;margin:.15rem 0}
+.pb-a a{color:inherit;text-decoration:none}
+.pb-ven{border-left-color:var(--outremer)}
+.pb-ouv{border-left-color:var(--minium)}
+.pb-fer{border-left-color:var(--encre2)}
 .pg-liste{margin:.9rem 0 0}
 .pg-l{display:grid;grid-template-columns:var(--gout) 1fr;align-items:center;min-height:1.25rem}
 .pg-l+.pg-l{margin-top:.12rem}
@@ -1308,6 +1334,81 @@ function etatsSerie(){
   });
 }
 
+/* Les boîtes de passage. Une fiche n'est pas seulement une barre : elle CHANGE d'état, et
+   ces changements sont datés. Chaque boîte est posée hors de la piste, un trait la
+   rattachant à son instant sur l'axe — c'est le trait qui désigne, la boîte qui informe.
+
+   Sur les PASSAGES seulement, pas sur les déclarations. Mesuré : 14 passages réels, contre
+   46 moments si l'on compte aussi les entrées de fiche — dont 13 le seul 19 août, jour où
+   le dossier est entré dans le dépôt et non jour où treize chantiers ont bougé. Et une
+   boîte lisible fait dans les 150 px : la bande en tient huit ou dix, pas cinquante.
+
+   Le rangement en lignes est glouton et calculé AVANT le rendu, ce qui impose une largeur
+   fixe par variante — le navigateur ne peut pas nous dire la largeur d'une boîte qui
+   n'existe pas encore. */
+const CARTE = 2;                                  // 1 court · 2 titré · 3 point de reprise
+/* Largeurs et hauteurs relevées à l'écran, pas estimées. Au premier essai la boîte
+   courte faisait 13,5 % — soit 115 px pour « interrompu → à venir », vingt caractères de
+   chasse fixe : le texte se coupait et débordait sur le rang du dessous. Une ligne de
+   boîte tient environ 25 caractères à 20 % de la bande, et c'est la ligne du passage qui
+   commande la largeur. La hauteur d'un rang laisse un demi-rem entre deux boîtes. */
+const CARTE_L = [0, 20, 25, 28];                  // largeur en % de la bande
+const CARTE_H = [0, 4.1, 7.4, 11.6];              // pas d'un rang, en rem
+
+const TEINTE = st => st === "à venir" ? "pb-ven"
+  : (st === "clos" || st === "livré" || st === "abandonné") ? "pb-fer" : "pb-ouv";
+
+function vuePassages(ax){
+  const P = D.passages || [];
+  if (!P.length) return "";
+  const parFile = new Map(D.chantiers.map(c => [c.file, c]));
+  const LARG = CARTE_L[CARTE], HR = CARTE_H[CARTE];
+
+  const items = P.map(([d, f, av, ap]) => ({ d, f, av, ap, c: parFile.get(f), x: ax.pc(d) }))
+    .sort((a, b) => a.x - b.x || a.f.localeCompare(b.f));
+
+  /* La boîte est centrée sur son instant, sauf aux bords où elle sortirait de la bande —
+     elle s'y appuie alors, et c'est le TRAIT qui garde la position vraie. Une boîte
+     recadrée ment de quelques pixels ; une boîte à moitié hors champ ne se lit pas. */
+  const fins = [];
+  for (const it of items) {
+    const g = Math.max(0, Math.min(100 - LARG, it.x - LARG / 2));
+    let r = 0;
+    while (fins[r] !== undefined && g < fins[r] + 0.8) r++;
+    fins[r] = g + LARG;
+    it.g = g; it.r = r;
+  }
+  const rangs = Math.max(...items.map(i => i.r)) + 1;
+
+  const corps = it => {
+    const c = it.c;
+    const n = c ? c.reste.filter(r => !r.fait).length : null;
+    const dit = n === null ? "" : n ? `${n} reste${n > 1 ? "s" : ""}` : "soldé";
+    const nom = esc(it.f.replace(/^.*\//, "").replace(/\.md$/, ""));
+    const haut = `<b>${c ? `<a href="#/c/${encodeURIComponent(c.code)}">${nom}</a>` : nom}</b>`
+      + `<span class="pb-p">${esc(it.av)} <i>→</i> ${esc(it.ap)}</span>`
+      + `<span class="pb-d">${esc(it.d)}${dit ? " · " + dit : ""}</span>`;
+    if (CARTE === 1) return haut;
+    const titre = c ? `<span class="pb-ti">${esc(sansCode(c.titre))}</span>` : "";
+    if (CARTE === 2) return haut + titre
+      + `<span class="pb-n">${c ? c.commits + " commit" + (c.commits > 1 ? "s" : "") : ""}</span>`;
+    return haut + titre
+      + (c && c.arrete ? `<span class="pb-a">${ligne(c.arrete)}</span>` : "");
+  };
+
+  const boite = it => `<div class="pb-x ${TEINTE(it.ap)}"
+      style="left:${it.g.toFixed(2)}%;width:${LARG}%;top:${(it.r * HR).toFixed(2)}rem"
+      title="${esc(it.d)} — ${esc(it.f)} : ${esc(it.av)} → ${esc(it.ap)}">${corps(it)}</div>`;
+
+  const trait = it => `<span class="pb-t" style="left:${it.x.toFixed(2)}%;
+      top:${((it.r + 1) * HR - 0.35).toFixed(2)}rem;
+      height:${((rangs - it.r - 1) * HR + 0.35).toFixed(2)}rem"></span>`;
+
+  return `<p class="pg-cap">passages de statut <i>${items.length} depuis le ${items[0].d}</i></p>
+    <div class="pg pb" style="--rangs:${(rangs * HR).toFixed(2)}rem;--hr:${HR}rem"><span></span>
+      <div class="pb-in">${items.map(trait).join("")}${items.map(boite).join("")}</div></div>`;
+}
+
 function vueProgression(){
   const ev = D.progression || [];
   const ax = progAxe();
@@ -1368,6 +1469,7 @@ function vueProgression(){
         <svg class="pg-g" viewBox="0 0 100 ${H}" preserveAspectRatio="none"
           aria-hidden="true">${blocProg(S, ax, max, H)}</svg></div>
       ${etats}
+      ${vuePassages(ax)}
       ${axe}
       <p class="fr-leg"><b>aire verte</b> les cases cochées &middot; <b>l'aire au-dessus</b>
         ce qui reste ouvert &mdash; l'écart entre les deux EST le reliquat &middot;
