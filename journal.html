@@ -376,6 +376,21 @@ a{color:var(--outremer)}
 .pg-tot{fill:var(--outremer-pale)}
 .pg-fai{fill:var(--verdet);opacity:.8}
 .pg-lig{fill:none;stroke:var(--encre3);stroke-width:1;vector-effect:non-scaling-stroke}
+.pg-e{margin-top:.15rem}
+.pg+.pg-cap{margin-top:.85rem}
+.et-g{display:block;width:100%;height:3.25rem}
+.et-ven{fill:var(--outremer)}
+.et-ouv{fill:var(--minium)}
+/* PAS `--pl-close-bg`, la teinte des plaques closes. Elle vaut #14171B en clair et
+   #272D34 en sombre : sur un fond de page a #101317, une AIRE de cette taille disparait
+   -- verifie a l'ecran, la bande des fermes etait indiscernable du fond et la rouge
+   semblait flotter. La teinte convient a une barre de trois pixels sur la frise, pas a
+   un aplat. `--encre2` s'inverse avec le theme et contraste des deux cotes. */
+.et-fer{fill:var(--encre2)}
+.pg-cap{font:500 var(--t1)/1 var(--mo);text-transform:uppercase;letter-spacing:.09em;
+  color:var(--encre3);margin:0 0 .3rem}
+.pg-cap i{font-style:normal;text-transform:none;letter-spacing:0;font-weight:400;
+  margin-left:.5rem;opacity:.85}
 .pg-liste{margin:.9rem 0 0}
 .pg-l{display:grid;grid-template-columns:var(--gout) 1fr;align-items:center;min-height:1.25rem}
 .pg-l+.pg-l{margin-top:.12rem}
@@ -1263,6 +1278,29 @@ function blocProg(S, ax, max, h){
     <path class="pg-lig" d="${cT}"/>`;
 }
 
+/* Le peuplement du dossier, sur l'axe de la progression pour qu'on lise les deux d'un
+   coup : la courbe du haut dit ce qui a été coché, celle du bas combien de chantiers
+   étaient ouverts pendant ce temps. C'est le recoupement qui informe — 131 items ouverts
+   d'un coup le 25 août ne veut pas dire la même chose selon qu'il y avait huit chantiers
+   ou vingt-trois.
+
+   TROIS bandes, pas six. La frise ne distingue pas `interrompu` de `différé` — les deux
+   prennent le minium, seul `à venir` a l'outremer et les fermés le noir. Inventer ici une
+   teinte que l'autre écran n'a pas ferait deux vocabulaires de couleur pour un seul
+   dossier. `différé` est donc replié avec `interrompu`, et la légende le dit.
+
+   Même grammaire que la courbe du dessus : ce qui est fini en bas, ce qui reste au-dessus.
+   Sans ça les deux figures se liraient en sens inverse l'une de l'autre. */
+function etatsSerie(){
+  const e = D.etats || [];
+  return e.map(([d, c]) => {
+    const fer = (c["clos"] || 0) + (c["livré"] || 0) + (c["abandonné"] || 0);
+    const ouv = (c["interrompu"] || 0) + (c["différé"] || 0);
+    const ven = c["à venir"] || 0;
+    return { d, b1: fer, b2: fer + ouv, b3: fer + ouv + ven, fer, ouv, ven };
+  });
+}
+
 function vueProgression(){
   const ev = D.progression || [];
   const ax = progAxe();
@@ -1299,20 +1337,42 @@ function vueProgression(){
       <i class="pg-n">${r.faits}/${r.total}</i></div></div>`;
   };
 
+  const fond = `<div class="fr-fond">${mois.filter(m => m.trait).map(m =>
+    `<span class="fr-mois" style="left:${ax.pc(m.s).toFixed(2)}%"></span>`).join("")}</div>`;
+
+  const E = etatsSerie(), d0 = E[E.length - 1];
+  const eMax = Math.max(...E.map(p => p.b3), 1), EH = 52, ex0 = E.length ? ax.pc(E[0].d) : 0;
+  const bande = (cle, cls) => `<path class="${cls}"
+    d="${progAire(progChemin(E, cle, ax, eMax, EH), EH, ex0)}"/>`;
+  /* Peintes de la plus haute à la plus basse : chaque aire recouvre la précédente, ce qui
+     donne un empilement franc sans transparence. Superposer des fills translucides
+     mélangeait les trois teintes en une bouillie brune dès la deuxième. */
+  const etats = !E.length ? "" : `<p class="pg-cap">chantiers ouverts et fermés
+      <i>${d0.ven + d0.ouv} ouverts &middot; ${d0.fer} fermés</i></p>
+    <div class="pg pg-e">${fond}<svg class="et-g" viewBox="0 0 100 ${EH}"
+      preserveAspectRatio="none" aria-hidden="true">${
+        bande("b3", "et-ven")}${bande("b2", "et-ouv")}${bande("b1", "et-fer")}</svg></div>`;
+
   return `<h2 class="sec"><span>Progression</span>
       <span class="n">${fin.faits} faits · ${fin.total - fin.faits} restants · ${S[0].d} → ${fin.d}</span></h2>
     <div class="frise">
-      <div class="pg"><div class="fr-fond">${mois.filter(m => m.trait).map(m =>
-        `<span class="fr-mois" style="left:${ax.pc(m.s).toFixed(2)}%"></span>`).join("")}</div>
+      <p class="pg-cap">cases cochées</p>
+      <div class="pg">${fond}
         <svg class="pg-g" viewBox="0 0 100 ${H}" preserveAspectRatio="none"
           aria-hidden="true">${blocProg(S, ax, max, H)}</svg></div>
+      ${etats}
       ${axe}
       <p class="fr-leg"><b>aire verte</b> les cases cochées &middot; <b>l'aire au-dessus</b>
         ce qui reste ouvert &mdash; l'écart entre les deux EST le reliquat &middot;
+        <b>en bas</b> le peuplement du dossier sur le même axe : gris les chantiers fermés,
+        rouge ceux en travail &mdash; <i>interrompu</i> et <i>différé</i> ensemble, comme
+        sur la frise qui ne les distingue pas non plus &mdash; bleu ceux à venir &middot;
         <b>escalier</b> et non courbe : entre deux commits le compte ne bouge pas
-        &middot; la courbe lit l'historique <b>commité</b>, donc ce qui vient d'être coché
-        depuis l'écran n'y est pas encore &middot; chaque ligne est ramenée à son propre
-        maximum, la forme se compare, pas la hauteur</p>
+        &middot; les deux lisent l'historique <b>commité</b>, donc ce qui vient d'être
+        coché depuis l'écran n'y est pas encore</p>
+      <p class="fr-leg">Chaque ligne ci-dessous est ramenée à <b>son propre maximum</b> :
+        la hauteur du vert est la fraction faite, et c'est la forme qui se compare d'une
+        ligne à l'autre, pas la hauteur.</p>
       <div class="pg-liste">${lignes.map(ligne).join("")}</div>
     </div>`;
 }

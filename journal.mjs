@@ -14,7 +14,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, relative, basename, dirname, isAbsolute } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 // Contrat de parsing partage avec pilotage/verifier.mjs -- voir journal-contrat.mjs.
-import { RX, frontmatter, walk, estPasse, constatsAudit, texteDeCase, lemmeArret } from "./journal-contrat.mjs";
+import { RX, STATUTS, frontmatter, walk, estPasse, constatsAudit, texteDeCase, lemmeArret } from "./journal-contrat.mjs";
 
 
 const args = process.argv.slice(2);
@@ -779,13 +779,29 @@ async function index() {
 // qu'une fois commité. C'est un historique, pas un état ; les deux ne se contredisent pas,
 // ils ne datent pas de la même chose. Vérifié le 2026-09-02 : reconstitution 770 faits
 // pour 778 sur le disque, l'écart valant exactement les 8 cases non commitées de l'instant.
-const progression = () => surTete("progression", () => {
+// La même passe rend une seconde série : le PEUPLEMENT du dossier. Un `+statut: clos`
+// dans un diff est une clôture datée, et 47 transitions sont ainsi lisibles sur AGRAFES.
+// Les deux séries sortent d'une seule lecture de `git log -p` — 1,4 Mo — plutôt que de
+// deux : elles lisent exactement les mêmes octets.
+//
+// Un instantané par JOUR et non par commit, pris une fois la journée finie. Deux commits
+// du même jour peuvent porter deux statuts pour la même fiche — mesuré : `EXP-01` passe
+// `interrompu` puis `à venir` le 24 août, `R2` `clos` puis `interrompu` le 27 — et c'est
+// le dernier qui vaut. Un instantané par commit aurait fait clignoter la courbe sur des
+// états qui n'ont pas duré une heure.
+const dossier = () => surTete("dossier", () => {
   const brut = gitEssai("log", "-p", "--reverse", "--format=%x1e%ad", "--date=short", "--", DIR);
-  if (!brut) return [];
+  if (!brut) return { cases: [], etats: [] };
   const par = new Map();
-  let jour = null, fichier = null, garde = false;
+  const st = new Map(), etats = [];
+  const compter = () => { const c = {}; for (const v of st.values()) c[v] = (c[v] || 0) + 1; return c; };
+  let jour = null, fichier = null, garde = false, bouge = false;
   for (const l of brut.split("\n")) {
-    if (l.charCodeAt(0) === 30) { jour = l.slice(1).trim(); continue; }
+    if (l.charCodeAt(0) === 30) {
+      const d = l.slice(1).trim();
+      if (jour && d !== jour && bouge) { etats.push([jour, compter()]); bouge = false; }
+      jour = d; continue;
+    }
     if (l.startsWith("diff --git ")) { fichier = null; garde = false; continue; }
     // Une suppression n'a de chemin que du côté `a/`, une création que du côté `b/`.
     // Prendre les deux et ne trancher qu'à la seconde ligne évite de perdre les items
@@ -797,9 +813,22 @@ const progression = () => surTete("progression", () => {
       // ne les compte pas en chantiers, la courbe ne les compte pas non plus. Mesuré sur
       // AGRAFES : `_TEMPLATE.md` apportait 9 cases d'exemple, seul fichier de la courbe
       // rattaché à aucune fiche ni passe.
-      garde = /\.md$/.test(fichier || "") && !/(^|\/)_/.test(fichier || ""); continue;
+      garde = /\.md$/.test(fichier || "") && !/(^|\/)_/.test(fichier || "");
+      // Une fiche supprimée sort du peuplement. Aucun cas dans AGRAFES au 2026-09-02
+      // (une seule suppression, et c'est un `.mjs`) — mais l'oubli ne se verrait que le
+      // jour où ça arrive, en laissant un chantier fantôme dans le compte pour toujours.
+      if (garde && l === "+++ /dev/null" && st.delete(fichier)) bouge = true;
+      continue;
     }
     if (!garde || !jour || (l[0] !== "+" && l[0] !== "-")) continue;
+    // Le statut d'une fiche, pris sur la ligne AJOUTÉE : la retirée porte l'ancien. La
+    // valeur doit appartenir au vocabulaire du contrat, sinon un `statut:` cité dans de
+    // la prose ou un bloc de code entrerait dans le compte.
+    if (l[0] === "+" && l.startsWith("+statut:")) {
+      const v = l.slice(8).trim();
+      if (STATUTS.includes(v) && st.get(fichier) !== v) { st.set(fichier, v); bouge = true; }
+      continue;
+    }
     const b = RX.box.exec(l.slice(1));
     if (!b) continue;
     const cle = jour + "\x1f" + fichier;
@@ -807,9 +836,13 @@ const progression = () => surTete("progression", () => {
     if (!e) par.set(cle, e = [0, 0]);            // [faits, ouverts]
     e[b[1] === " " ? 1 : 0] += l[0] === "+" ? 1 : -1;
   }
-  return [...par].filter(([, e]) => e[0] || e[1])
-    .map(([k, e]) => { const [d, f] = k.split("\x1f"); return [d, f, e[0], e[1]]; })
-    .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
+  if (jour && bouge) etats.push([jour, compter()]);
+  return {
+    cases: [...par].filter(([, e]) => e[0] || e[1])
+      .map(([k, e]) => { const [d, f] = k.split("\x1f"); return [d, f, e[0], e[1]]; })
+      .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1])),
+    etats
+  };
 });
 
 async function build() {
@@ -905,7 +938,7 @@ async function build() {
     silenceCourant: jours.length
       ? Math.round((Date.now() - Date.parse(jours[jours.length - 1])) / 864e5) : null,
     chantiers, passes, liens, masses: mss, branches: enVol,
-    progression: progression(),
+    progression: dossier().cases, etats: dossier().etats,
     veille: gardeFou(), controle: controleur(),
     commits: commits.filter(c => c.date >= depuis)
   };
