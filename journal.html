@@ -371,7 +371,14 @@ a{color:var(--outremer)}
 .fr-m0{transform:none}
 .fr-m{position:absolute;top:0;font:400 var(--t1)/1 var(--mo);color:var(--encre3);
   transform:translateX(-50%);white-space:nowrap}
-.pg{position:relative;margin:.1rem 0 0}
+/* MÊME géométrie que la frise, et ce n'est pas un détail d'esthétique. `.fr-fond` est
+   encastré de la gouttière (`inset:0 0 0 var(--gout)`) parce que sur la frise la piste
+   commence après la colonne des codes. Posé sur un bloc pleine largeur, il décalait les
+   traits de mois de la courbe qu'ils sont censés jalonner — mesuré à l'écran : trait à
+   1014 px quand la donnée tombait à 999, et l'écart atteint la gouttière entière, 124 px,
+   au bord gauche. L'axe (`.fr-axe`) et les lignes par fiche (`.pg-l`) portaient déjà cette
+   grille ; seules les deux grandes courbes en sortaient. */
+.pg{display:grid;grid-template-columns:var(--gout) 1fr;position:relative;margin:.1rem 0 0}
 .pg-g{display:block;width:100%;height:9rem}
 .pg-tot{fill:var(--outremer-pale)}
 .pg-fai{fill:var(--verdet);opacity:.8}
@@ -404,7 +411,7 @@ a{color:var(--outremer)}
 .fr-leg{font:400 var(--t1)/1.5 var(--mo);color:var(--encre3);margin:.9rem 0 0}
 .fr-leg b{font-weight:500;color:var(--encre2)}
 @media (max-width:900px){
-  .fr-l,.fr-axe{grid-template-columns:4.2rem 1fr}
+  .fr-l,.fr-axe,.pg{grid-template-columns:4.2rem 1fr}
   .fr-fond{inset:0 0 0 4.2rem}
 }
 .masses{width:100%;border-collapse:collapse;font:400 var(--t2)/1.4 var(--mo)}
@@ -1349,7 +1356,7 @@ function vueProgression(){
      mélangeait les trois teintes en une bouillie brune dès la deuxième. */
   const etats = !E.length ? "" : `<p class="pg-cap">chantiers ouverts et fermés
       <i>${d0.ven + d0.ouv} ouverts &middot; ${d0.fer} fermés</i></p>
-    <div class="pg pg-e">${fond}<svg class="et-g" viewBox="0 0 100 ${EH}"
+    <div class="pg pg-e"><span></span>${fond}<svg class="et-g" viewBox="0 0 100 ${EH}"
       preserveAspectRatio="none" aria-hidden="true">${
         bande("b3", "et-ven")}${bande("b2", "et-ouv")}${bande("b1", "et-fer")}</svg></div>`;
 
@@ -1357,7 +1364,7 @@ function vueProgression(){
       <span class="n">${fin.faits} faits · ${fin.total - fin.faits} restants · ${S[0].d} → ${fin.d}</span></h2>
     <div class="frise">
       <p class="pg-cap">cases cochées</p>
-      <div class="pg">${fond}
+      <div class="pg"><span></span>${fond}
         <svg class="pg-g" viewBox="0 0 100 ${H}" preserveAspectRatio="none"
           aria-hidden="true">${blocProg(S, ax, max, H)}</svg></div>
       ${etats}

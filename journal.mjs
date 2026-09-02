@@ -793,7 +793,7 @@ const dossier = () => surTete("dossier", () => {
   const brut = gitEssai("log", "-p", "--reverse", "--format=%x1e%ad", "--date=short", "--", DIR);
   if (!brut) return { cases: [], etats: [] };
   const par = new Map();
-  const st = new Map(), etats = [];
+  const st = new Map(), etats = [], passages = [];
   const compter = () => { const c = {}; for (const v of st.values()) c[v] = (c[v] || 0) + 1; return c; };
   let jour = null, fichier = null, garde = false, bouge = false;
   for (const l of brut.split("\n")) {
@@ -826,7 +826,14 @@ const dossier = () => surTete("dossier", () => {
     // la prose ou un bloc de code entrerait dans le compte.
     if (l[0] === "+" && l.startsWith("+statut:")) {
       const v = l.slice(8).trim();
-      if (STATUTS.includes(v) && st.get(fichier) !== v) { st.set(fichier, v); bouge = true; }
+      if (STATUTS.includes(v) && st.get(fichier) !== v) {
+        // La PREMIÈRE valeur d'une fiche n'est pas un passage, c'est sa déclaration. Les
+        // distinguer importe : 32 fiches sont déclarées, dont 13 le 19 août — le jour où
+        // le dossier est entré dans le dépôt, pas un jour où treize chantiers ont bougé.
+        // Mesuré : 14 passages réels contre 46 moments si l'on confond les deux.
+        if (st.has(fichier)) passages.push([jour, fichier, st.get(fichier), v]);
+        st.set(fichier, v); bouge = true;
+      }
       continue;
     }
     const b = RX.box.exec(l.slice(1));
@@ -838,6 +845,7 @@ const dossier = () => surTete("dossier", () => {
   }
   if (jour && bouge) etats.push([jour, compter()]);
   return {
+    passages,
     cases: [...par].filter(([, e]) => e[0] || e[1])
       .map(([k, e]) => { const [d, f] = k.split("\x1f"); return [d, f, e[0], e[1]]; })
       .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1])),
@@ -939,6 +947,7 @@ async function build() {
       ? Math.round((Date.now() - Date.parse(jours[jours.length - 1])) / 864e5) : null,
     chantiers, passes, liens, masses: mss, branches: enVol,
     progression: dossier().cases, etats: dossier().etats,
+    passages: dossier().passages,
     veille: gardeFou(), controle: controleur(),
     commits: commits.filter(c => c.date >= depuis)
   };
