@@ -1164,7 +1164,7 @@ function vueFil(){
   if (!D.commits.length) return vide(
     `<p>Aucun commit sur la fenêtre courante.</p>
      <p>Relance le serveur avec une fenêtre plus large :
-     <code>node journal.mjs --days 180</code>.</p>`);
+     <code>npm run journal -- --days 180</code>.</p>`);
 
   const n = {};
   D.commits.forEach(c => n[c.scope] = (n[c.scope] || 0) + 1);
@@ -1703,8 +1703,19 @@ async function charger(){
 addEventListener("hashchange", rendre);
 charger().catch(() => {
   document.getElementById("vue").innerHTML = vide(
-    `<p>Impossible de joindre le serveur.</p>
-     <p>Lance <code>node journal.mjs</code> à la racine du dépôt, puis recharge.</p>`);
+    /* Ce message a dit DEUX faussetés à la fois, et un lecteur les a rencontrées.
+       La commande d'abord : `node journal.mjs` datait du temps où l'outil vivait dans le
+       dépôt qu'il observe. Depuis l'extraction il est une dépendance, le fichier n'est
+       plus à la racine, et la consigne renvoyait un MODULE_NOT_FOUND à qui la suivait.
+       Une instruction survit à ce qu'elle décrit sans que rien ne le signale.
+       La cause ensuite : ce `catch` enveloppe tout `charger()`, rendu compris. Une
+       exception dans une vue — un `const` masquant une fonction, vécu le 2 septembre —
+       affiche donc « impossible de joindre le serveur » alors qu'il répond en 1,2 s. Le
+       texte ne prétend plus savoir laquelle des deux s'est produite. */
+    `<p>Le journal n'a pas pu construire sa page.</p>
+     <p>Si le serveur est arrêté, relance-le par <code>npm run journal</code> à la racine
+     du dépôt, puis recharge. S'il tourne, l'erreur est dans la page elle-même et la
+     console du navigateur la nomme.</p>`);
 });
 </script>
 
