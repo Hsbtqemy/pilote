@@ -946,6 +946,7 @@ async function build() {
     silenceCourant: jours.length
       ? Math.round((Date.now() - Date.parse(jours[jours.length - 1])) / 864e5) : null,
     chantiers, passes, liens, masses: mss, branches: enVol,
+    dir: DIR,
     progression: dossier().cases, etats: dossier().etats,
     passages: dossier().passages,
     veille: gardeFou(), controle: controleur(),

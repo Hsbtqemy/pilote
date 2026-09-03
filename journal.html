@@ -528,7 +528,7 @@ a{color:var(--outremer)}
     <p class="marque"><b id="repo">…</b><span class="branche" id="br">…</span><span id="voisins"></span></p>
     <p class="etat" id="sil"></p>
     <nav class="ong" id="tabs">
-      <a href="#/">chantiers</a><a href="#/qa">passes</a><a href="#/frise">frise</a><a href="#/masses">masses</a><a href="#/fil">fil</a>
+      <a href="#/">chantiers</a><a href="#/qa">passes</a><a href="#/frise">frise</a><a href="#/progression">progression</a><a href="#/masses">masses</a><a href="#/fil">fil</a>
     </nav>
   </div>
 </header>
@@ -723,7 +723,11 @@ const ditCollisions = (l) => l.slice(0, 3).map(x => {
    tient les deux cas limites : un dépôt sans historique de dossier rend un tableau VIDE
    et non l'absence du champ, et l'export statique le recopie tel quel. `voisins`, lui,
    reste vidé plutôt que supprimé par l'export — mais il n'est plus la sentinelle. */
-const serveurPerime = () => D.progression === undefined;
+/* Ré-armée à chaque champ ajouté : elle doit nommer le plus RÉCENT, sans quoi un moteur
+   d'hier sert la vue d'aujourd'hui sans que rien ne le dise. `passages` succède ici à
+   `progression` — un moteur qui a le second sans le premier existe (7e39f67), et c'est
+   `passages`, précisément, dont l'absence viderait l'onglet Progression. */
+const serveurPerime = () => D.passages === undefined;
 
 const bandePerime = () => !serveurPerime() ? "" :
   `<p class="perime"><b>Le serveur tourne sur une version antérieure de
@@ -1346,7 +1350,7 @@ function etatsSerie(){
    Le rangement en lignes est glouton et calculé AVANT le rendu, ce qui impose une largeur
    fixe par variante — le navigateur ne peut pas nous dire la largeur d'une boîte qui
    n'existe pas encore. */
-const CARTE = 2;                                  // 1 court · 2 titré · 3 point de reprise
+const CARTE = 3;                                  // 1 court · 2 titré · 3 point de reprise
 /* Largeurs et hauteurs relevées à l'écran, pas estimées. Au premier essai la boîte
    courte faisait 13,5 % — soit 115 px pour « interrompu → à venir », vingt caractères de
    chasse fixe : le texte se coupait et débordait sur le rang du dessous. Une ligne de
@@ -1412,7 +1416,13 @@ function vuePassages(ax){
 function vueProgression(){
   const ev = D.progression || [];
   const ax = progAxe();
-  if (!ax || !ev.length) return "";
+  /* Un écran à lui seul ne peut plus rendre la chaîne vide : sur la frise, l'absence de
+     progression laissait simplement la frise. Ici elle laisserait une page blanche. */
+  if (!ax || !ev.length) return vide(
+    `<p>Aucune progression à retracer : aucun commit n'a encore coché ni ouvert de case
+     dans <code>${esc(D.dir || "pilotage")}/</code>.</p>
+     <p>La courbe se reconstitue depuis l'historique git du dossier — elle apparaîtra au
+     premier commit qui touche une ligne <code>- [ ]</code>.</p>`);
   const S = progSerie(ev), fin = S[S.length - 1], max = fin.total || 1, H = 100;
 
   const mois = jalonsMois(ax.lo, ax.b);
@@ -1542,8 +1552,11 @@ function vueFrise(){
     <div class="fr-t">${barre(p.entree, p.derniere, "fr-q",
       `${p.entree || "?"} → ${p.derniere || "jamais rejouée"} · ${p.faits}/${p.total}`)}</div></div>`;
 
-  return vueProgression()
-    + `<h2 class="sec"><span>Étendue</span><span class="n">${
+  /* La progression a quitté cet écran pour le sien. Elle y avait doublé la hauteur de la
+     page : la seule bande des passages fait 92,8 rem — près de 1 500 px — et repoussait la
+     frise sous deux écrans de défilement. Deux questions distinctes, deux onglets : la
+     frise situe un chantier dans le temps, la progression dit si ça avance. */
+  return `<h2 class="sec"><span>Étendue</span><span class="n">${
         new Date(lo).toISOString().slice(0, 10)} → ${D.dernierJour || "?"}</span></h2>
     <div class="frise">
     <div class="fr-corps">
@@ -1609,6 +1622,7 @@ function rendre(){
   else if (h.startsWith("qa/")) { html = vuePasse(h.slice(3));  onglet = "#/qa"; }
   else if (h === "fil")         { html = vueFil();              onglet = "#/fil"; }
   else if (h === "frise")       { html = vueFrise();           onglet = "#/frise"; }
+  else if (h === "progression") { html = vueProgression();     onglet = "#/progression"; }
   else if (h === "masses")      { html = vueMasses();           onglet = "#/masses"; }
   else                          html = vueChantiers();
 
