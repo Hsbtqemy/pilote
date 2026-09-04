@@ -399,15 +399,14 @@ a{color:var(--outremer)}
 .pg-cap i{font-style:normal;text-transform:none;letter-spacing:0;font-weight:400;
   margin-left:.5rem;opacity:.85}
 .pb{margin-top:.75rem}
-.pb-in{position:relative;height:var(--rangs)}
-.pb-t{position:absolute;width:1px;background:var(--encre3);opacity:.5}
-.pb-x{position:absolute;display:block;text-decoration:none;background:var(--plat);
+.pb-in{position:relative}
+/* Le trait passe DERRIÈRE les cartes. Posé après elles dans le DOM il les traversait :
+   descendant du bas de sa boîte au pied de la bande, il coupe forcément tout ce qui se
+   trouve dessous, et une ligne en travers d'un texte se lit comme une rature. */
+.pb-t{position:absolute;width:1px;background:var(--encre3);opacity:.5;z-index:0}
+.pb-x{position:absolute;display:block;text-decoration:none;background:var(--plat);z-index:1;
   border-left:2.5px solid var(--encre3);padding:.3rem .45rem;border-radius:1px;
-  font:400 var(--t1)/1.35 var(--mo);color:var(--encre2);overflow:hidden;
-  /* Plafond et non hauteur ferme : depuis que le descriptif ne va qu'à la dernière boîte
-     d'une fiche, les autres sont bien plus courtes et une hauteur imposée les remplissait
-     de vide. Le plafond garde le rang infranchissable. */
-  max-height:calc(var(--hr) - .55rem)}
+  font:400 var(--t1)/1.35 var(--mo);color:var(--encre2);top:0}
 .pb-x b{display:block;font-weight:500;letter-spacing:.06em;text-transform:uppercase}
 .pb-x b a{color:var(--encre);text-decoration:none}
 .pb-x b a:hover{text-decoration:underline}
@@ -1360,7 +1359,6 @@ const CARTE = 3;                                  // 1 court · 2 titré · 3 po
    boîte tient environ 25 caractères à 20 % de la bande, et c'est la ligne du passage qui
    commande la largeur. La hauteur d'un rang laisse un demi-rem entre deux boîtes. */
 const CARTE_L = [0, 20, 25, 28];                  // largeur en % de la bande
-const CARTE_H = [0, 4.1, 7.4, 11.6];              // pas d'un rang, en rem
 
 const TEINTE = st => st === "à venir" ? "pb-ven"
   : (st === "clos" || st === "livré" || st === "abandonné") ? "pb-fer" : "pb-ouv";
@@ -1369,7 +1367,7 @@ function vuePassages(ax){
   const P = D.passages || [];
   if (!P.length) return "";
   const parFile = new Map(D.chantiers.map(c => [c.file, c]));
-  const LARG = CARTE_L[CARTE], HR = CARTE_H[CARTE];
+  const LARG = CARTE_L[CARTE];
 
   /* Le point de reprise décrit où en est le chantier MAINTENANT. Le poser sur chacune de
      ses boîtes le répète — 5 fois sur 17 ici — et surtout le fait mentir : affiché sur un
@@ -1388,15 +1386,7 @@ function vuePassages(ax){
   /* La boîte est centrée sur son instant, sauf aux bords où elle sortirait de la bande —
      elle s'y appuie alors, et c'est le TRAIT qui garde la position vraie. Une boîte
      recadrée ment de quelques pixels ; une boîte à moitié hors champ ne se lit pas. */
-  const fins = [];
-  for (const it of items) {
-    const g = Math.max(0, Math.min(100 - LARG, it.x - LARG / 2));
-    let r = 0;
-    while (fins[r] !== undefined && g < fins[r] + 0.8) r++;
-    fins[r] = g + LARG;
-    it.g = g; it.r = r;
-  }
-  const rangs = Math.max(...items.map(i => i.r)) + 1;
+  for (const it of items) it.g = Math.max(0, Math.min(100 - LARG, it.x - LARG / 2));
 
   const corps = it => {
     const c = it.c;
@@ -1414,17 +1404,58 @@ function vuePassages(ax){
       + (it.fin && c && c.arrete ? `<span class="pb-a">${ligne(c.arrete)}</span>` : "");
   };
 
-  const boite = it => `<div class="pb-x ${TEINTE(it.ap)}"
-      style="left:${it.g.toFixed(2)}%;width:${LARG}%;top:${(it.r * HR).toFixed(2)}rem"
+  /* Ni `top` ni hauteur ici : la pose se fait après le rendu, sur les hauteurs RÉELLES
+     (voir `poserBoites`). L'ordre du DOM suit l'axe, ce dont la pose se sert. */
+  const boite = it => `<div class="pb-x ${TEINTE(it.ap)}" data-x="${it.x.toFixed(2)}"
+      style="left:${it.g.toFixed(2)}%;width:${LARG}%"
       title="${esc(it.d)} — ${esc(it.f)} : ${esc(it.av)} → ${esc(it.ap)}">${corps(it)}</div>`;
 
-  const trait = it => `<span class="pb-t" style="left:${it.x.toFixed(2)}%;
-      top:${((it.r + 1) * HR - 0.35).toFixed(2)}rem;
-      height:${((rangs - it.r - 1) * HR + 0.35).toFixed(2)}rem"></span>`;
-
   return `<p class="pg-cap">passages de statut <i>${items.length} depuis le ${items[0].d}</i></p>
-    <div class="pg pb" style="--rangs:${(rangs * HR).toFixed(2)}rem;--hr:${HR}rem"><span></span>
-      <div class="pb-in">${items.map(trait).join("")}${items.map(boite).join("")}</div></div>`;
+    <div class="pg pb"><span></span>
+      <div class="pb-in">${items.map(boite).join("")}</div></div>`;
+}
+
+/* La pose des boîtes, APRÈS insertion, sur leurs hauteurs mesurées.
+   Elles étaient rangées sur une grille au pas constant, calibré par variante sur la boîte
+   la plus haute. Depuis que le point de reprise ne va qu'à la dernière boîte d'une fiche,
+   la plupart sont deux à trois fois plus courtes et la grille laissait du vide partout —
+   un pas de 11,6 rem sous une boîte de 4. Aucune constante ne pouvait valoir pour les
+   deux tailles ; le navigateur, lui, connaît la vraie.
+   Balayage classique : dans l'ordre de l'axe, chaque boîte descend jusqu'au premier
+   creux libre sous celles qui la chevauchent horizontalement. Dix-sept boîtes, donc le
+   coût quadratique ne se discute pas. Le trait part du bas de SA boîte et descend au pied
+   de la bande — il désigne l'instant, la boîte peut donc flotter où elle veut. */
+function poserBoites(){
+  const bande = document.querySelector(".pb-in");
+  if (!bande) return;
+  const GAP = 6;
+  const L = bande.clientWidth;
+  const boites = [...bande.querySelectorAll(".pb-x")];
+  const poses = [];
+  for (const el of boites) {
+    const g = el.offsetLeft, d = g + el.offsetWidth, h = el.offsetHeight;
+    let t = 0;
+    for (;;) {
+      const choc = poses.find(p => g < p.d + GAP && d + GAP > p.g && t < p.b && t + h > p.t);
+      if (!choc) break;
+      t = choc.b + GAP;
+    }
+    poses.push({ g, d, t, b: t + h, el });
+    el.style.top = t + "px";
+  }
+  const H = poses.length ? Math.max(...poses.map(p => p.b)) : 0;
+  bande.style.height = H + "px";
+  /* Les traits sont posés ici aussi : leur longueur dépend de la hauteur finale, que le
+     rendu ne pouvait pas connaître. */
+  for (const p of poses) {
+    const x = Number(p.el.dataset.x) / 100 * L;
+    const t = document.createElement("span");
+    t.className = "pb-t";
+    t.style.left = x + "px";
+    t.style.top = (p.b - 4) + "px";
+    t.style.height = Math.max(0, H - p.b + 4) + "px";
+    bande.appendChild(t);
+  }
 }
 
 function vueProgression(){
@@ -1649,6 +1680,7 @@ function rendre(){
   if (sc) sc.addEventListener("change", () => { scope = sc.value; rendre(); });
   const rz = document.getElementById("reset");
   if (rz) rz.addEventListener("click", () => armer(rz, h.slice(3)));
+  poserBoites();
 }
 
 /* ---------------- écritures ---------------- */
