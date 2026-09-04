@@ -404,7 +404,10 @@ a{color:var(--outremer)}
 .pb-x{position:absolute;display:block;text-decoration:none;background:var(--plat);
   border-left:2.5px solid var(--encre3);padding:.3rem .45rem;border-radius:1px;
   font:400 var(--t1)/1.35 var(--mo);color:var(--encre2);overflow:hidden;
-  height:calc(var(--hr) - .55rem)}
+  /* Plafond et non hauteur ferme : depuis que le descriptif ne va qu'à la dernière boîte
+     d'une fiche, les autres sont bien plus courtes et une hauteur imposée les remplissait
+     de vide. Le plafond garde le rang infranchissable. */
+  max-height:calc(var(--hr) - .55rem)}
 .pb-x b{display:block;font-weight:500;letter-spacing:.06em;text-transform:uppercase}
 .pb-x b a{color:var(--encre);text-decoration:none}
 .pb-x b a:hover{text-decoration:underline}
@@ -1368,7 +1371,18 @@ function vuePassages(ax){
   const parFile = new Map(D.chantiers.map(c => [c.file, c]));
   const LARG = CARTE_L[CARTE], HR = CARTE_H[CARTE];
 
-  const items = P.map(([d, f, av, ap]) => ({ d, f, av, ap, c: parFile.get(f), x: ax.pc(d) }))
+  /* Le point de reprise décrit où en est le chantier MAINTENANT. Le poser sur chacune de
+     ses boîtes le répète — 5 fois sur 17 ici — et surtout le fait mentir : affiché sur un
+     passage du 1er septembre, il affirme d'une date passée ce qui n'est vrai que du jour.
+     Il ne va donc que sur la dernière boîte de chaque fiche, les précédentes gardant le
+     code, le passage, la date et le titre.
+     Le rang se prend sur `D.passages`, qui est dans l'ordre des commits, et non sur la
+     liste triée : deux passages du même jour sur la même fiche existent — `R2` le 27 août,
+     `interrompu → clos` puis `clos → interrompu` — et seul l'ordre d'origine les départage. */
+  const rangDernier = new Map();
+  P.forEach(([, f], i) => rangDernier.set(f, i));
+  const items = P.map(([d, f, av, ap], i) =>
+      ({ d, f, av, ap, c: parFile.get(f), x: ax.pc(d), fin: rangDernier.get(f) === i }))
     .sort((a, b) => a.x - b.x || a.f.localeCompare(b.f));
 
   /* La boîte est centrée sur son instant, sauf aux bords où elle sortirait de la bande —
@@ -1397,7 +1411,7 @@ function vuePassages(ax){
     if (CARTE === 2) return haut + titre
       + `<span class="pb-n">${c ? c.commits + " commit" + (c.commits > 1 ? "s" : "") : ""}</span>`;
     return haut + titre
-      + (c && c.arrete ? `<span class="pb-a">${ligne(c.arrete)}</span>` : "");
+      + (it.fin && c && c.arrete ? `<span class="pb-a">${ligne(c.arrete)}</span>` : "");
   };
 
   const boite = it => `<div class="pb-x ${TEINTE(it.ap)}"
