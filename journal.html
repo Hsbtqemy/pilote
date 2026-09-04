@@ -1684,9 +1684,22 @@ function toast(m, ko){
 }
 
 /* ---------------- chargement ---------------- */
-async function charger(){
+/* Empreinte de la charge, `genere` retiré : cet horodatage change à CHAQUE construction,
+   donc comparer les charges brutes conclurait toujours « ça a bougé ». Tout le reste est
+   dérivé du dépôt et ne varie que quand le dépôt varie. */
+const signature = j => { const { genere, ...reste } = j; return JSON.stringify(reste); };
+let SIGNE = null;
+
+/* `discret` : on revient dans la fenêtre, on redemande la charge, et on ne redessine que
+   si quelque chose a changé — sinon un simple aller-retour repeindrait la page et
+   perdrait la position de lecture pour rien. */
+async function charger(discret){
   const r = await fetch("journal.json", { cache:"no-store" });
-  D = await r.json(); RXL = null;
+  const j = await r.json();
+  const sg = signature(j);
+  if (discret && sg === SIGNE) return false;
+  SIGNE = sg;
+  D = j; RXL = null;
   document.getElementById("repo").textContent = D.repo;
   document.getElementById("br").textContent = D.branche;
   /* Les autres journaux ouverts. Des liens en dur vers leur port : chaque serveur reste
@@ -1697,7 +1710,7 @@ async function charger(){
   /* Un export dit ce qu'il est et de quand il date. Sans ça, une page ouverte depuis un
      signet ressemble à s'y méprendre au journal vivant, et on lit un état d'il y a trois
      semaines en le croyant courant. */
-  if (D.statique) {
+  if (D.statique && !document.querySelector(".fige-bandeau")) {
     const d = new Date(D.genere);
     document.getElementById("sil").insertAdjacentHTML("afterend",
       `<p class="fige-bandeau">Export en lecture seule — état du ${jour(D.genere.slice(0, 10))}`
@@ -1711,10 +1724,33 @@ async function charger(){
   document.getElementById("sil").textContent = D.dernierJour
     ? `dernier commit le ${jour(D.dernierJour)} — il y a ${D.silenceCourant} jours`
     : "aucun commit";
+  const y = window.scrollY;
   rendre();
+  if (discret) window.scrollTo(0, y);      // le redessin remet la page en haut
+  return true;
 }
 
 addEventListener("hashchange", rendre);
+
+/* La page lisait le dépôt UNE fois, à l'ouverture. Changer d'onglet ne redemandait rien —
+   `hashchange` redessine depuis les données en mémoire — et seule une case cochée
+   rappelait `charger()`. Un chantier clos dans l'éditeur puis commité laissait donc la
+   page sur un état périmé, sans que rien ne le dise : l'écran restait plausible, ce qui
+   est la pire forme d'erreur pour un outil qui prétend mesurer.
+   Le retour dans la fenêtre est le bon déclencheur : on quitte le journal pour travailler,
+   on y revient pour regarder. Pas de sondage — il n'y a rien à surveiller entre deux
+   coups d'œil. `visibilitychange` couvre le changement d'onglet, `focus` le passage d'une
+   fenêtre à l'autre où le premier ne part pas toujours ; le plancher de deux secondes
+   empêche les deux de se déclencher en double, la construction de la charge coûtant une
+   bonne seconde au serveur. */
+let VU = Date.now();
+const revenu = () => {
+  if (document.visibilityState !== "visible" || Date.now() - VU < 2000) return;
+  VU = Date.now();
+  charger(true).catch(() => {});
+};
+addEventListener("visibilitychange", revenu);
+addEventListener("focus", revenu);
 charger().catch(() => {
   document.getElementById("vue").innerHTML = vide(
     /* Ce message a dit DEUX faussetés à la fois, et un lecteur les a rencontrées.
