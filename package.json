@@ -4,6 +4,7 @@
   "description": "Journal de bord local : confronte un dossier pilotage/ a ce que git montre.",
   "type": "module",
   "bin": { "pilote": "journal.mjs" },
+  "scripts": { "test": "node --test" },
   "files": ["journal.mjs", "journal.html", "journal-contrat.mjs", "pilotage/verifier.mjs", "pilotage/_TEMPLATE.md", "pilotage/_CLAUDE-bloc.md", "README.md"],
   "engines": { "node": ">=18" },
   "license": "MIT",

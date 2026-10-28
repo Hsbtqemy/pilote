@@ -31,6 +31,8 @@ ces sections.
 - QA visuelle : écrire une passe dans `pilotage/qa/`, jamais dans le fil de
   conversation. Regrouper les points par zone en H3.
 - Ne jamais cocher soi-même une case d'une passe de QA.
+- Ne pas écrire `derniere:` dans une passe — le bouton *réinitialiser* le pose —, et
+  commiter une partie avant de la réinitialiser.
 - Ne pas créer de fichier pour un finding traité en un seul commit.
 
 Le journal se lit avec `pilote` puis `localhost:4123` — la commande est idempotente,

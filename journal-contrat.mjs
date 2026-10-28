@@ -236,3 +236,46 @@ export const constatsAudit = (texte) => {
   const constats = [...parCode.values()];
   return { reconnu: constats.length > 0, constats };
 };
+
+// ── Une passe a-t-elle été jouée ? ───────────────────────────────────────────────
+// Les deux bacs de l'écran — « Jamais jouées », « Déjà jouées » — étaient dérivés de
+// `derniere:` seul, depuis le premier commit. Or ce champ, n'importe quelle main peut
+// l'écrire : l'exemple du gabarit le faisait recopier à la création, et le bouton ne le
+// posait pas quand la ligne manquait. Mesuré sur un dépôt hôte le 2026-09-15 (P-8) : neuf
+// passes sur dix-sept mal rangées, dans les deux sens — quatre complètes en « Jamais
+// jouées », quatre vides en « Déjà jouées » avec leur date de CRÉATION pour « dernière ».
+//
+// Jouée = un FAIT de jeu : une case cochée maintenant, ou une case cochée un jour dans
+// l'historique du fichier (`dejaCochee`, que le serveur tire de `git log -p`). Le second
+// couvre la passe jouée, commitée, puis réinitialisée. Il ne couvre pas une partie jouée
+// et réinitialisée sans commit entre les deux : rien ne l'a écrite, rien ne peut la lire.
+//
+// `derniere` n'est rendue QUE pour une passe jouée : avant la première case, la date qu'on
+// y lit n'est la date d'aucune partie. `dateEcrite` garde la valeur telle qu'écrite, pour
+// ce qui ne parle pas de jeu — depuis quand une passe attend d'être jouée.
+export const jeuDePasse = ({ fm = {}, faits = 0, dejaCochee = false } = {}) => {
+  const dateEcrite = (fm.derniere && fm.derniere !== "—") ? fm.derniere : null;
+  const jouee = faits > 0 || Boolean(dejaCochee);
+  return { jouee, derniere: jouee ? dateEcrite : null, dateEcrite };
+};
+
+/** Le texte d'une passe réinitialisée : toutes les cases décochées, `derniere:` posé au
+ *  `jour` donné. La ligne est cherchée là où `frontmatter` la LIT — dans le frontmatter,
+ *  nulle part ailleurs — et INSÉRÉE si elle n'y est pas. Le bouton ne faisait que
+ *  remplacer une ligne existante : une passe née sans le champ le restait après autant
+ *  de réinitialisations qu'on voulait (P-8). Une passe sans frontmatter en reçoit un.
+ *
+ *  Écriture et non lecture, mais elle vit ici pour deux raisons : elle doit viser
+ *  exactement le bloc que `RX.fm` lit, et le serveur ne s'importe pas — c'est le seul
+ *  endroit où un test peut l'atteindre. */
+export const reinitialiserPasse = (texte, jour) => {
+  const lines = texte.split(/\r?\n/).map(l => RX.box.test(l) ? l.replace(/\[[xX]\]/, "[ ]") : l);
+  let fin = -1;
+  if (lines[0] === "---")
+    for (let i = 1; i < lines.length; i++) if (lines[i].startsWith("---")) { fin = i; break; }
+  if (fin < 0) return ["---", `derniere: ${jour}`, "---", "", ...lines].join("\n");
+  const i = lines.slice(1, fin).findIndex(l => /^derniere:/.test(l));
+  if (i >= 0) lines[i + 1] = `derniere: ${jour}`;
+  else lines.splice(fin, 0, `derniere: ${jour}`);
+  return lines.join("\n");
+};

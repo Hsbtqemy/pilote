@@ -14,7 +14,8 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, relative, basename, dirname, isAbsolute } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 // Contrat de parsing partage avec pilotage/verifier.mjs -- voir journal-contrat.mjs.
-import { RX, STATUTS, frontmatter, walk, estPasse, constatsAudit, texteDeCase, lemmeArret } from "./journal-contrat.mjs";
+import { RX, STATUTS, frontmatter, walk, estPasse, constatsAudit, texteDeCase, lemmeArret,
+         jeuDePasse, reinitialiserPasse } from "./journal-contrat.mjs";
 
 
 const args = process.argv.slice(2);
@@ -285,8 +286,7 @@ async function pilotage() {
         file: rel, nom: fm.passe || titre, titre,
         chantier: (fm.chantier && fm.chantier !== "—") ? fm.chantier : null,
         duree: fm.duree || null,
-        derniere: (fm.derniere && fm.derniere !== "—") ? fm.derniere : null,
-        intro: intro(text), zones, total: tot,
+        fm, intro: intro(text), zones, total: tot,
         faits: zones.reduce((n, z) => n + z.items.filter(i => i.fait).length, 0)
       });
     } else {
@@ -791,9 +791,12 @@ async function index() {
 // états qui n'ont pas duré une heure.
 const dossier = () => surTete("dossier", () => {
   const brut = gitEssai("log", "-p", "--reverse", "--format=%x1e%ad", "--date=short", "--", DIR);
-  if (!brut) return { cases: [], etats: [] };
+  if (!brut) return { cases: [], etats: [], cochees: new Set() };
   const par = new Map();
   const st = new Map(), etats = [], passages = [];
+  // Les fichiers où une case a été cochée au moins une fois dans l'historique : le fait
+  // de jeu qui survit à une réinitialisation (P-8, `jeuDePasse`).
+  const cochees = new Set();
   const compter = () => { const c = {}; for (const v of st.values()) c[v] = (c[v] || 0) + 1; return c; };
   let jour = null, fichier = null, garde = false, bouge = false;
   for (const l of brut.split("\n")) {
@@ -842,10 +845,11 @@ const dossier = () => surTete("dossier", () => {
     let e = par.get(cle);
     if (!e) par.set(cle, e = [0, 0]);            // [faits, ouverts]
     e[b[1] === " " ? 1 : 0] += l[0] === "+" ? 1 : -1;
+    if (l[0] === "+" && b[1] !== " ") cochees.add(fichier);
   }
   if (jour && bouge) etats.push([jour, compter()]);
   return {
-    passages,
+    passages, cochees,
     cases: [...par].filter(([, e]) => e[0] || e[1])
       .map(([k, e]) => { const [d, f] = k.split("\x1f"); return [d, f, e[0], e[1]]; })
       .sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1])),
@@ -918,11 +922,22 @@ async function build() {
   // Une passe vieillit comme un chantier : en jours actifs. Sans ça, « armée mais pas
   // encore jouée » ne durait qu'une journée et sortait de l'écran le lendemain.
   for (const p of passes) {
-    p.silence = p.derniere ? joursActifs(jours, p.derniere) : null;
+    // Jouée ou non : un fait de jeu, pas la présence de `derniere:` (P-8, voir le
+    // contrat). Le frontmatter brut ne sort pas dans la charge utile.
+    const { jouee, derniere, dateEcrite } =
+      jeuDePasse({ fm: p.fm, faits: p.faits, dejaCochee: dossier().cochees.has(p.file) });
+    delete p.fm;
+    Object.assign(p, { jouee, derniere });
     // Quand la passe est entrée dans le dépôt. Avec `derniere`, ça donne la durée
     // pendant laquelle elle a été en jeu — une passe écrite il y a deux mois et rejouée
     // hier ne raconte pas la même chose qu'une passe écrite et jouée le même jour.
     p.entree = entree(p.file);
+    // Depuis quand elle attend : la dernière réinitialisation, sinon son entrée dans le
+    // dépôt. L'entrée prend le relais depuis que le gabarit ne fait plus recopier de
+    // date à la création — c'était, sans le dire, ce qui rendait « armée » une passe
+    // posée la veille.
+    const depuis = dateEcrite || p.entree;
+    p.silence = depuis ? joursActifs(jours, depuis) : null;
     liens[p.nom] ||= `#/qa/${encodeURIComponent(p.file)}`;
   }
 
@@ -973,9 +988,7 @@ async function cocher({ file, ligne, fait }) {
 async function reinitialiser({ file }) {
   const abs = sur(file);
   const today = new Date().toISOString().slice(0, 10);
-  const lines = (await readFile(abs, "utf8")).split(/\r?\n/).map(l =>
-    RX.box.test(l) ? l.replace(/\[[xX]\]/, "[ ]") : l.replace(/^derniere:\s*.*$/, `derniere: ${today}`));
-  await writeFile(abs, lines.join("\n"), "utf8");
+  await writeFile(abs, reinitialiserPasse(await readFile(abs, "utf8"), today), "utf8");
 }
 
 // ---------- export statique ----------

@@ -1113,8 +1113,18 @@ const item = (file, r) => {
 };
 
 /* ---------------- passes ---------------- */
-const etat = p => !p.derniere ? "jamais jouée"
-  : p.faits === p.total ? "complète" : `dernière ${p.derniere}`;
+/* Jouée ou non vient du serveur (`jeuDePasse`, dans le contrat) : un fait de jeu — une
+   case cochée, maintenant ou dans l'historique —, plus la présence de `derniere:`, que
+   n'importe quelle main peut écrire (P-8). Le repli n'est là que pour un moteur périmé
+   qui ne sert pas encore le champ, comme `libelleDeduit` : l'ancienne déduction, parfois
+   fausse, plutôt que tout dans « Jamais jouées ».
+
+   Une passe sans date ne se dit qu'ici, et la liste comme la frise passent par là : elles
+   disaient « jamais jouée » et « jamais rejouée » pour la même valeur nulle. */
+const jouee = p => p.jouee ?? Boolean(p.derniere);
+const derniereDite = p => p.derniere || (jouee(p) ? "non datée" : "jamais jouée");
+const etat = p => jouee(p) && p.faits === p.total ? "complète"
+  : p.derniere ? `dernière ${p.derniere}` : derniereDite(p);
 
 const rowPasse = p => `<article class="carte s-clos">
     <div class="plaque">
@@ -1143,8 +1153,8 @@ function vueQA(){
   const bloc = (l, t) => !l.length ? "" :
     `<h2 class="sec"><span>${t}</span><span class="n">${l.length}</span></h2>
      <div class="pile">${l.map(rowPasse).join("")}</div>`;
-  return bloc(D.passes.filter(p => !p.derniere), "Jamais jouées")
-       + bloc(D.passes.filter(p => p.derniere), "Déjà jouées");
+  return bloc(D.passes.filter(p => !jouee(p)), "Jamais jouées")
+       + bloc(D.passes.filter(jouee), "Déjà jouées");
 }
 
 function vuePasse(file){
@@ -1595,7 +1605,7 @@ function vueFrise(){
   const ligneP = p => `<div class="fr-l fr-lp">
     <a class="fr-c" href="#/qa/${encodeURIComponent(p.file)}">${esc(p.nom)}</a>
     <div class="fr-t">${barre(p.entree, p.derniere, "fr-q",
-      `${p.entree || "?"} → ${p.derniere || "jamais rejouée"} · ${p.faits}/${p.total}`)}</div></div>`;
+      `${p.entree || "?"} → ${derniereDite(p)} · ${p.faits}/${p.total}`)}</div></div>`;
 
   /* La progression a quitté cet écran pour le sien. Elle y avait doublé la hauteur de la
      page : la seule bande des passages fait 92,8 rem — près de 1 500 px — et repoussait la
